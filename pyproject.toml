@@ -1,0 +1,70 @@
+[project]
+name = "rag_pageindex"
+version = "0.1.0"
+description = "RAG using Pageindex lib as retrieval"
+readme = "README.md"
+authors = [
+    { name = "Antoine Fleurentin", email = "antoine.j.fleurentin@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-settings>=2.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.31.0",
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "pytest-env>=1.2.0",
+    "ruff>=0.14.10",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+# command-name = "package.module:function"
+start-app = "rag_pageindex.main:main"
+
+[tool.ruff]
+line-length = 79
+indent-width = 4
+include = ["**.py", "*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "PTH", # flake8-use-pathlib
+    "ANN", # flake8-annotations
+    "ARG", # flake8-unused-arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["ANN", "ARG"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+files = ["src"]
+exclude = ["tests/"]
+python_version = "3.12"
+check_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+# Note : Ruff already enforce type hinting
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+env = [
+    "ENVIRONMENT=test",
+    "LOG_LEVEL=INFO",
+]

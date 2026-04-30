@@ -1,0 +1,15 @@
+_commit: v0.5.1
+_src_path: https://github.com/Victor02091/template_python_project
+add_ci: false
+add_docker: false
+add_docs: false
+add_pre_commit: false
+add_type_checking: true
+author_email: antoine.j.fleurentin@gmail.com
+author_name: Antoine Fleurentin
+description: RAG using Pageindex lib as retrieval
+install_dependencies: true
+project_name: Rag Pageindex
+project_slug: rag_pageindex
+python_version: '3.12'
+type_checker: mypy
