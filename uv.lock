@@ -1014,6 +1014,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "loguru" },
     { name = "pydantic" },
@@ -1034,6 +1035,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.40.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1.0" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0" },

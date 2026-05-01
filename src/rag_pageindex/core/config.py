@@ -14,13 +14,17 @@ class Settings(BaseSettings):
     )
 
     # LLM client
-    llm_provider: Literal["anthropic"] = "anthropic"
-    llm_model: str = "claude-sonnet-4-6"
+    llm_provider: Literal["anthropic", "openai_compatible"] = "openai_compatible"
+    llm_model: str = "google/gemini-2.5-flash-preview"
     anthropic_api_key: SecretStr | None = None
+    # OpenAI-compatible backend (OpenRouter, vLLM, etc.)
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_api_key: SecretStr | None = None
     llm_max_retries: int = 10
     llm_retry_delay_s: float = 1.0
     llm_temperature: float = 0.0
     llm_max_output_tokens: int = 4096
+    llm_timeout: float = 120.0
 
     # PageIndex pipeline tuning (was config.yaml upstream)
     pageindex_toc_check_page_num: int = 20
