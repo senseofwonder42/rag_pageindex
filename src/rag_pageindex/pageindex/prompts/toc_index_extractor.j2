@@ -5,17 +5,19 @@ The provided pages contains tags like <physical_index_X> and <physical_index_X> 
 The structure variable is the numeric system which represents the index of the hierarchy section in the table of contents. For example, the first section has structure index 1, the first subsection has structure index 1.1, the second subsection has structure index 1.2, etc.
 
 The response should be in the following JSON format:
-[
-    {
-        "structure": <structure index, "x.x.x" or None> (string),
-        "title": <title of the section>,
-        "physical_index": "<physical_index_X>" (keep the format)
-    },
-    ...
-]
+{
+    "items": [
+        {
+            "structure": <structure index, "x.x.x" or null> (string),
+            "title": <title of the section>,
+            "physical_index": "<physical_index_X>" or null (keep the <physical_index_X> format)
+        },
+        ...
+    ]
+}
 
 Only add the physical_index to the sections that are in the provided pages.
-If the section is not in the provided pages, do not add the physical_index to it.
+If the section is not in the provided pages, set physical_index to null.
 Directly return the final JSON structure. Do not output anything else.
 
 Table of contents:

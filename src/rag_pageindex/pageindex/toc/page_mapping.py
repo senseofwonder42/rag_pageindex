@@ -7,10 +7,10 @@ from typing import Any
 
 from loguru import logger
 
-from rag_pageindex.pageindex.json_extract import extract_json
 from rag_pageindex.pageindex.llm.protocol import LLMClient
 from rag_pageindex.pageindex.pdf.reader import Page
 from rag_pageindex.pageindex.prompts import render
+from rag_pageindex.pageindex.structured_responses import TocGeneratedResponse
 from rag_pageindex.pageindex.toc.helpers import (
     convert_physical_index_to_int,
     remove_page_number,
@@ -24,13 +24,8 @@ from rag_pageindex.pageindex.toc.parsing import (
 
 def _generate_toc_init(part: str, *, llm: LLMClient) -> list[dict[str, Any]]:
     prompt = render("generate_toc_init.j2", part=part)
-    response = llm.complete([{"role": "user", "content": prompt}])
-    if response.finish_reason != "finished":
-        raise RuntimeError(
-            "generate_toc_init did not finish: "
-            f"{response.finish_reason}"
-        )
-    return extract_json(response.content)
+    result = llm.complete_structured([{"role": "user", "content": prompt}], TocGeneratedResponse)
+    return [e.model_dump() for e in result.items]
 
 
 def _generate_toc_continue(
@@ -44,13 +39,8 @@ def _generate_toc_continue(
         part=part,
         toc_content=_json.dumps(toc_content, indent=2),
     )
-    response = llm.complete([{"role": "user", "content": prompt}])
-    if response.finish_reason != "finished":
-        raise RuntimeError(
-            "generate_toc_continue did not finish: "
-            f"{response.finish_reason}"
-        )
-    return extract_json(response.content)
+    result = llm.complete_structured([{"role": "user", "content": prompt}], TocGeneratedResponse)
+    return [e.model_dump() for e in result.items]
 
 
 def page_list_to_group_text(
@@ -62,10 +52,7 @@ def page_list_to_group_text(
 ) -> list[str]:
     """Divide pages into text groups that each fit within `max_tokens`."""
     page_contents = [
-        (
-            f"<physical_index_{start_index + i}>\n{p.text}\n"
-            f"<physical_index_{start_index + i}>\n\n"
-        )
+        (f"<physical_index_{start_index + i}>\n{p.text}\n<physical_index_{start_index + i}>\n\n")
         for i, p in enumerate(pages)
     ]
     token_lengths = [p.token_length for p in pages]
@@ -78,13 +65,9 @@ def page_list_to_group_text(
     current_subset: list[str] = []
     current_token_count = 0
     expected_parts = math.ceil(num_tokens / max_tokens)
-    average_tokens = math.ceil(
-        ((num_tokens / expected_parts) + max_tokens) / 2
-    )
+    average_tokens = math.ceil(((num_tokens / expected_parts) + max_tokens) / 2)
 
-    for i, (page_content, page_tokens) in enumerate(
-        zip(page_contents, token_lengths, strict=True)
-    ):
+    for i, (page_content, page_tokens) in enumerate(zip(page_contents, token_lengths, strict=True)):
         if current_token_count + page_tokens > average_tokens:
             subsets.append("".join(current_subset))
             overlap_start = max(i - overlap_page, 0)
@@ -111,10 +94,7 @@ def extract_matching_page_pairs(
         for page_item in toc_page:
             if phy_item.get("title") == page_item.get("title"):
                 physical_index = phy_item.get("physical_index")
-                if (
-                    physical_index is not None
-                    and int(physical_index) >= start_page_index
-                ):
+                if physical_index is not None and int(physical_index) >= start_page_index:
                     pairs.append(
                         {
                             "title": phy_item.get("title"),
@@ -141,9 +121,7 @@ def calculate_page_offset(pairs: list[dict[str, Any]]) -> int | None:
     return max(counts, key=lambda k: counts[k])
 
 
-def _add_page_offset_to_toc_json(
-    data: list[dict[str, Any]], offset: int
-) -> list[dict[str, Any]]:
+def _add_page_offset_to_toc_json(data: list[dict[str, Any]], offset: int) -> list[dict[str, Any]]:
     for item in data:
         if item.get("page") is not None and isinstance(item["page"], int):
             item["physical_index"] = item["page"] + offset
@@ -180,21 +158,16 @@ def process_none_page_numbers(
             list_i = page_idx - start_index
             if 0 <= list_i < len(pages):
                 page_contents.append(
-                    f"<physical_index_{page_idx}>\n{pages[list_i].text}\n"
-                    f"<physical_index_{page_idx}>\n\n"
+                    f"<physical_index_{page_idx}>\n{pages[list_i].text}\n<physical_index_{page_idx}>\n\n"
                 )
 
         item_copy = copy.deepcopy(item)
         item_copy.pop("page", None)
-        result = add_page_number_to_toc(
-            "".join(page_contents), [item_copy], llm=llm
-        )
+        result = add_page_number_to_toc("".join(page_contents), [item_copy], llm=llm)
         if result:
             raw_pi = result[0].get("physical_index")
             if isinstance(raw_pi, str) and raw_pi.startswith("<physical_index"):
-                item["physical_index"] = int(
-                    raw_pi.split("_")[-1].rstrip(">").strip()
-                )
+                item["physical_index"] = int(raw_pi.split("_")[-1].rstrip(">").strip())
                 item.pop("page", None)
 
     return toc_items
@@ -208,9 +181,10 @@ def process_toc_with_page_numbers(
     toc_check_page_num: int,
     llm: LLMClient,
     start_index: int = 1,
+    toc_max_output_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build TOC with physical indices when the TOC already has page numbers."""
-    toc_with_page_number = toc_transformer(toc_content, llm=llm)
+    toc_with_page_number = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
     logger.info("toc_transformer: {}", toc_with_page_number)
 
     toc_no_page_number = remove_page_number(copy.deepcopy(toc_with_page_number))
@@ -222,8 +196,7 @@ def process_toc_with_page_numbers(
         min(start_page_index + toc_check_page_num, len(pages)),
     ):
         main_content_parts.append(
-            f"<physical_index_{pi + 1}>\n{pages[pi].text}\n"
-            f"<physical_index_{pi + 1}>\n\n"
+            f"<physical_index_{pi + 1}>\n{pages[pi].text}\n<physical_index_{pi + 1}>\n\n"
         )
     main_content = "".join(main_content_parts)
 
@@ -232,18 +205,14 @@ def process_toc_with_page_numbers(
 
     toc_with_pi = convert_physical_index_to_int(toc_with_pi)
 
-    matching_pairs = extract_matching_page_pairs(
-        toc_with_page_number, toc_with_pi, start_page_index
-    )
+    matching_pairs = extract_matching_page_pairs(toc_with_page_number, toc_with_pi, start_page_index)
     logger.info("matching_pairs: {}", matching_pairs)
 
     offset = calculate_page_offset(matching_pairs)
     logger.info("offset: {}", offset)
 
     if offset is not None:
-        toc_with_page_number = _add_page_offset_to_toc_json(
-            toc_with_page_number, offset
-        )
+        toc_with_page_number = _add_page_offset_to_toc_json(toc_with_page_number, offset)
 
     toc_with_page_number = process_none_page_numbers(
         toc_with_page_number, pages, start_index=start_index, llm=llm
@@ -260,21 +229,18 @@ def process_toc_no_page_numbers(
     start_index: int = 1,
     llm: LLMClient,
     max_tokens: int = 20_000,
+    toc_max_output_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build TOC with physical indices when the TOC has no page numbers."""
-    toc_content_list = toc_transformer(toc_content, llm=llm)
+    toc_content_list = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
     logger.info("toc_transformer: {}", toc_content_list)
 
-    groups = page_list_to_group_text(
-        pages, max_tokens=max_tokens, start_index=start_index
-    )
+    groups = page_list_to_group_text(pages, max_tokens=max_tokens, start_index=start_index)
     logger.info("process_toc_no_page_numbers: {} groups", len(groups))
 
     toc_with_page_number = copy.deepcopy(toc_content_list)
     for group_text in groups:
-        toc_with_page_number = add_page_number_to_toc(
-            group_text, toc_with_page_number, llm=llm
-        )
+        toc_with_page_number = add_page_number_to_toc(group_text, toc_with_page_number, llm=llm)
     logger.info("add_page_number_to_toc done")
 
     return convert_physical_index_to_int(toc_with_page_number)
@@ -288,9 +254,7 @@ def process_no_toc(
     max_tokens: int = 20_000,
 ) -> list[dict[str, Any]]:
     """Build TOC from scratch (no TOC in the document)."""
-    groups = page_list_to_group_text(
-        pages, max_tokens=max_tokens, start_index=start_index
-    )
+    groups = page_list_to_group_text(pages, max_tokens=max_tokens, start_index=start_index)
     logger.info("process_no_toc: {} groups", len(groups))
 
     toc: list[dict[str, Any]] = _generate_toc_init(groups[0], llm=llm)

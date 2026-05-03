@@ -80,9 +80,7 @@ def get_text_of_pages(
         page_text = pages[page_num].text
         if with_labels:
             parts.append(
-                f"<physical_index_{page_num + 1}>\n"
-                f"{page_text}\n"
-                f"<physical_index_{page_num + 1}>\n"
+                f"<physical_index_{page_num + 1}>\n{page_text}\n<physical_index_{page_num + 1}>\n"
             )
         else:
             parts.append(page_text)

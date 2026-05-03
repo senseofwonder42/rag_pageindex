@@ -18,26 +18,18 @@ def _parse_pages(pages: str) -> list[int]:
             start_s, end_s = part.split("-", 1)
             start, end = int(start_s.strip()), int(end_s.strip())
             if start > end:
-                raise ValueError(
-                    f"Invalid range '{part}': start must be <= end"
-                )
+                raise ValueError(f"Invalid range '{part}': start must be <= end")
             result.extend(range(start, end + 1))
         else:
             result.append(int(part))
     return sorted(set(result))
 
 
-def _get_pdf_page_content(
-    doc_info: dict[str, Any], page_nums: list[int]
-) -> list[dict[str, Any]]:
+def _get_pdf_page_content(doc_info: dict[str, Any], page_nums: list[int]) -> list[dict[str, Any]]:
     cached = doc_info.get("pages")
     if cached:
         page_map = {p["page"]: p["content"] for p in cached}
-        return [
-            {"page": p, "content": page_map[p]}
-            for p in page_nums
-            if p in page_map
-        ]
+        return [{"page": p, "content": page_map[p]} for p in page_nums if p in page_map]
     path = Path(doc_info["path"])
     with path.open("rb") as f:
         reader = PyPDF2.PdfReader(f)
@@ -51,11 +43,7 @@ def _get_pdf_page_content(
 
 def _remove_text_fields(node: _Tree) -> _Tree:
     if isinstance(node, dict):
-        return {
-            k: _remove_text_fields(v)
-            for k, v in node.items()
-            if k != "text"
-        }
+        return {k: _remove_text_fields(v) for k, v in node.items() if k != "text"}
     if isinstance(node, list):
         return [_remove_text_fields(item) for item in node]
     return node
@@ -89,9 +77,7 @@ def get_document_structure(documents: dict[str, Any], doc_id: str) -> str:
     )
 
 
-def get_page_content(
-    documents: dict[str, Any], doc_id: str, pages: str
-) -> str:
+def get_page_content(documents: dict[str, Any], doc_id: str, pages: str) -> str:
     """Return page content JSON for the given pages string."""
     doc_info = documents.get(doc_id)
     if not doc_info:
@@ -100,12 +86,7 @@ def get_page_content(
         page_nums = _parse_pages(pages)
     except (ValueError, AttributeError) as e:
         return json.dumps(
-            {
-                "error": (
-                    f"Invalid pages format: {pages!r}. "
-                    f"Use '5-7', '3,8', or '12'. Error: {e}"
-                )
-            }
+            {"error": (f"Invalid pages format: {pages!r}. Use '5-7', '3,8', or '12'. Error: {e}")}
         )
     try:
         content = _get_pdf_page_content(doc_info, page_nums)

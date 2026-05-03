@@ -125,17 +125,13 @@ def write_node_id(data: dict[str, Any] | list[Any]) -> None:
     _write(data)
 
 
-def add_node_text(
-    node: dict[str, Any] | list[Any], pages: list[Page]
-) -> None:
+def add_node_text(node: dict[str, Any] | list[Any], pages: list[Page]) -> None:
     """Attach concatenated page text to each node in-place."""
     if isinstance(node, dict):
         start = node.get("start_index")
         end = node.get("end_index")
         if start is not None and end is not None:
-            node["text"] = "".join(
-                pages[i].text for i in range(start - 1, end)
-            )
+            node["text"] = "".join(pages[i].text for i in range(start - 1, end))
         if "nodes" in node:
             add_node_text(node["nodes"], pages)
     elif isinstance(node, list):
@@ -164,6 +160,7 @@ async def meta_processor(
             toc_check_page_num=settings.pageindex_toc_check_page_num,
             llm=llm,
             start_index=start_index,
+            toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
         )
     elif mode == "process_toc_no_page_numbers":
         toc = process_toc_no_page_numbers(
@@ -172,6 +169,7 @@ async def meta_processor(
             start_index=start_index,
             llm=llm,
             max_tokens=settings.pageindex_max_tokens_per_node,
+            toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
         )
     else:
         toc = process_no_toc(
@@ -182,13 +180,9 @@ async def meta_processor(
         )
 
     toc = [item for item in toc if item.get("physical_index") is not None]
-    toc = validate_and_truncate_physical_indices(
-        toc, len(pages), start_index=start_index
-    )
+    toc = validate_and_truncate_physical_indices(toc, len(pages), start_index=start_index)
 
-    accuracy, incorrect = await verify_toc(
-        pages, toc, start_index=start_index, llm=llm
-    )
+    accuracy, incorrect = await verify_toc(pages, toc, start_index=start_index, llm=llm)
     logger.info(
         "meta_processor verify mode={} accuracy={:.2%} incorrect={}",
         mode,
@@ -261,17 +255,10 @@ async def process_large_node_recursively(
             llm=llm,
             settings=settings,
         )
-        sub_toc = await check_title_appearance_in_start_concurrent(
-            sub_toc, pages, llm=llm
-        )
-        valid_sub = [
-            item for item in sub_toc if item.get("physical_index") is not None
-        ]
+        sub_toc = await check_title_appearance_in_start_concurrent(sub_toc, pages, llm=llm)
+        valid_sub = [item for item in sub_toc if item.get("physical_index") is not None]
 
-        titles_match = (
-            valid_sub
-            and node["title"].strip() == valid_sub[0]["title"].strip()
-        )
+        titles_match = valid_sub and node["title"].strip() == valid_sub[0]["title"].strip()
         if titles_match:
             node["nodes"] = post_processing(valid_sub[1:], node["end_index"])
             if len(valid_sub) > 1:
@@ -283,9 +270,7 @@ async def process_large_node_recursively(
 
     if node.get("nodes"):
         tasks = [
-            process_large_node_recursively(
-                child, pages, llm=llm, settings=settings
-            )
+            process_large_node_recursively(child, pages, llm=llm, settings=settings)
             for child in node["nodes"]
         ]
         await asyncio.gather(*tasks)
@@ -331,18 +316,11 @@ async def tree_parser(
         )
 
     toc = add_preface_if_needed(toc)
-    toc = await check_title_appearance_in_start_concurrent(
-        toc, pages, llm=llm
-    )
-    valid_toc = [
-        item for item in toc if item.get("physical_index") is not None
-    ]
+    toc = await check_title_appearance_in_start_concurrent(toc, pages, llm=llm)
+    valid_toc = [item for item in toc if item.get("physical_index") is not None]
     tree = post_processing(valid_toc, len(pages))
 
-    tasks = [
-        process_large_node_recursively(node, pages, llm=llm, settings=settings)
-        for node in tree
-    ]
+    tasks = [process_large_node_recursively(node, pages, llm=llm, settings=settings) for node in tree]
     await asyncio.gather(*tasks)
 
     return tree

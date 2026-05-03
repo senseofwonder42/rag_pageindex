@@ -8,9 +8,7 @@ def get_default_client(settings: Settings) -> LLMClient:
     """Build the configured `LLMClient` from `Settings`."""
     if settings.llm_provider == "anthropic":
         if settings.anthropic_api_key is None:
-            raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set; cannot build AnthropicClient."
-            )
+            raise RuntimeError("ANTHROPIC_API_KEY is not set; cannot build AnthropicClient.")
         return AnthropicClient(
             api_key=settings.anthropic_api_key.get_secret_value(),
             model=settings.llm_model,
@@ -20,9 +18,7 @@ def get_default_client(settings: Settings) -> LLMClient:
         )
     if settings.llm_provider == "openai_compatible":
         if settings.llm_api_key is None:
-            raise RuntimeError(
-                "LLM_API_KEY is not set; cannot build OpenAICompatibleClient."
-            )
+            raise RuntimeError("LLM_API_KEY is not set; cannot build OpenAICompatibleClient.")
         return OpenAICompatibleClient(
             base_url=settings.llm_base_url,
             api_key=settings.llm_api_key.get_secret_value(),

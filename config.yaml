@@ -1,0 +1,26 @@
+# Non-secret configuration defaults.
+# Secrets (api keys) must be set in .env or as environment variables — never here.
+# Environment variables always override values in this file.
+
+log_level: INFO
+
+# LLM backend
+llm_provider: openai_compatible
+llm_model: mistralai/mistral-small-3.2-24b-instruct
+llm_base_url: https://openrouter.ai/api/v1
+llm_max_retries: 10
+llm_retry_delay_s: 1.0
+llm_temperature: 0.0
+llm_max_output_tokens: 4096
+llm_timeout: 120.0
+
+# PageIndex pipeline tuning
+pageindex_toc_check_page_num: 20
+pageindex_max_pages_per_node: 10
+pageindex_max_tokens_per_node: 20000
+pageindex_token_ceiling: 110000
+pageindex_toc_max_output_tokens: 16000
+pageindex_add_node_id: true
+pageindex_add_node_summary: false
+pageindex_add_node_text: false
+pageindex_add_doc_description: false

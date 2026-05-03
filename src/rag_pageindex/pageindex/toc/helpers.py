@@ -13,13 +13,9 @@ def convert_physical_index_to_int(
                 value = item["physical_index"]
                 if isinstance(value, str):
                     if value.startswith("<physical_index_"):
-                        item["physical_index"] = int(
-                            value.split("_")[-1].rstrip(">").strip()
-                        )
+                        item["physical_index"] = int(value.split("_")[-1].rstrip(">").strip())
                     elif value.startswith("physical_index_"):
-                        item["physical_index"] = int(
-                            value.split("_")[-1].strip()
-                        )
+                        item["physical_index"] = int(value.split("_")[-1].strip())
         return data
     if isinstance(data, str):
         if data.startswith("<physical_index_"):

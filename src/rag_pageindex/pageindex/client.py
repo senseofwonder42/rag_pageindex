@@ -140,9 +140,7 @@ class PageIndexClient:
         if meta is None:
             meta = self._rebuild_meta()
             if meta:
-                logger.info(
-                    "Loaded {} document(s) from workspace (rebuild)", len(meta)
-                )
+                logger.info("Loaded {} document(s) from workspace (rebuild)", len(meta))
         for doc_id, entry in meta.items():
             doc = dict(entry, id=doc_id)
             if doc.get("path") and not Path(doc["path"]).is_absolute():

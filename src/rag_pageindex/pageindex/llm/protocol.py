@@ -1,8 +1,12 @@
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypedDict, runtime_checkable
+from typing import Literal, Protocol, TypedDict, TypeVar, runtime_checkable
+
+from pydantic import BaseModel
 
 Role = Literal["user", "assistant", "system"]
 FinishReason = Literal["finished", "max_output_reached", "error"]
+
+_T = TypeVar("_T", bound=BaseModel)
 
 
 class Message(TypedDict):
@@ -43,5 +47,23 @@ class LLMClient(Protocol):
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse: ...
+
+    def complete_structured(
+        self,
+        messages: list[Message],
+        response_model: type[_T],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> _T: ...
+
+    async def acomplete_structured(
+        self,
+        messages: list[Message],
+        response_model: type[_T],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> _T: ...
 
     def count_tokens(self, text: str) -> int: ...

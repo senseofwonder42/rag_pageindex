@@ -6,10 +6,14 @@ from typing import Any
 
 from loguru import logger
 
-from rag_pageindex.pageindex.json_extract import extract_json
 from rag_pageindex.pageindex.llm.protocol import LLMClient
 from rag_pageindex.pageindex.pdf.reader import Page
 from rag_pageindex.pageindex.prompts import render
+from rag_pageindex.pageindex.structured_responses import (
+    PhysicalIndexResponse,
+    TitleAppearanceResponse,
+    TitleStartResponse,
+)
 from rag_pageindex.pageindex.toc.helpers import convert_physical_index_to_int
 
 
@@ -25,10 +29,7 @@ def validate_and_truncate_physical_indices(
     max_allowed = page_list_length + start_index - 1
     truncated = 0
     for item in toc_items:
-        if (
-            item.get("physical_index") is not None
-            and item["physical_index"] > max_allowed
-        ):
+        if item.get("physical_index") is not None and item["physical_index"] > max_allowed:
             item["physical_index"] = None
             truncated += 1
     if truncated:
@@ -58,15 +59,13 @@ async def check_title_appearance(
         }
     page_number = item["physical_index"]
     page_text = pages[page_number - start_index].text
-    prompt = render(
-        "check_title_appearance.j2", title=title, page_text=page_text
+    prompt = render("check_title_appearance.j2", title=title, page_text=page_text)
+    result = await llm.acomplete_structured(
+        [{"role": "user", "content": prompt}], TitleAppearanceResponse
     )
-    response = await llm.acomplete([{"role": "user", "content": prompt}])
-    parsed = extract_json(response.content)
-    answer = parsed.get("answer", "no")
     return {
         "list_index": item.get("list_index"),
-        "answer": answer,
+        "answer": result.answer,
         "title": title,
         "page_number": page_number,
     }
@@ -79,12 +78,9 @@ async def check_title_appearance_in_start(
     llm: LLMClient,
 ) -> str:
     """Check if `title` is the first content on `page_text`. Returns 'yes'/'no'."""
-    prompt = render(
-        "check_title_appearance_in_start.j2", title=title, page_text=page_text
-    )
-    response = await llm.acomplete([{"role": "user", "content": prompt}])
-    parsed = extract_json(response.content)
-    return parsed.get("start_begin", "no")
+    prompt = render("check_title_appearance_in_start.j2", title=title, page_text=page_text)
+    result = await llm.acomplete_structured([{"role": "user", "content": prompt}], TitleStartResponse)
+    return result.start_begin
 
 
 async def check_title_appearance_in_start_concurrent(
@@ -98,9 +94,7 @@ async def check_title_appearance_in_start_concurrent(
         if item.get("physical_index") is None:
             item["appear_start"] = "no"
 
-    valid_items = [
-        item for item in structure if item.get("physical_index") is not None
-    ]
+    valid_items = [item for item in structure if item.get("physical_index") is not None]
     tasks = [
         check_title_appearance_in_start(
             item["title"],
@@ -157,8 +151,7 @@ async def verify_toc(
             indexed_items.append(item_copy)
 
     tasks = [
-        check_title_appearance(item, pages, start_index=start_index, llm=llm)
-        for item in indexed_items
+        check_title_appearance(item, pages, start_index=start_index, llm=llm) for item in indexed_items
     ]
     results: list[dict[str, Any]] = list(await asyncio.gather(*tasks))
 
@@ -181,9 +174,8 @@ async def single_toc_item_index_fixer(
         section_title=section_title,
         content=content,
     )
-    response = await llm.acomplete([{"role": "user", "content": prompt}])
-    parsed = extract_json(response.content)
-    return convert_physical_index_to_int(parsed.get("physical_index"))
+    result = await llm.acomplete_structured([{"role": "user", "content": prompt}], PhysicalIndexResponse)
+    return convert_physical_index_to_int(result.physical_index)
 
 
 async def fix_incorrect_toc(
@@ -229,8 +221,7 @@ async def fix_incorrect_toc(
             li = pi - start_index
             if 0 <= li < len(pages):
                 page_contents.append(
-                    f"<physical_index_{pi}>\n{pages[li].text}\n"
-                    f"<physical_index_{pi}>\n\n"
+                    f"<physical_index_{pi}>\n{pages[li].text}\n<physical_index_{pi}>\n\n"
                 )
         content_range = "".join(page_contents)
 
@@ -239,9 +230,7 @@ async def fix_incorrect_toc(
         )
         check_item = incorrect_item.copy()
         check_item["physical_index"] = physical_index
-        check_result = await check_title_appearance(
-            check_item, pages, start_index=start_index, llm=llm
-        )
+        check_result = await check_title_appearance(check_item, pages, start_index=start_index, llm=llm)
         return {
             "list_index": list_index,
             "title": incorrect_item["title"],

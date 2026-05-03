@@ -14,9 +14,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Index a PDF with PageIndex and print the tree as JSON."
     )
-    parser.add_argument(
-        "--pdf-path", required=True, help="Path to the PDF file"
-    )
+    parser.add_argument("--pdf-path", required=True, help="Path to the PDF file")
     return parser.parse_args(argv)
 
 

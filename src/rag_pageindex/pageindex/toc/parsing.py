@@ -1,70 +1,32 @@
 from __future__ import annotations
 
+import json as _json
 from typing import Any
 
 from loguru import logger
 
-from rag_pageindex.pageindex.json_extract import extract_json, get_json_content
 from rag_pageindex.pageindex.llm.protocol import LLMClient
 from rag_pageindex.pageindex.prompts import render
-from rag_pageindex.pageindex.toc.detection import (
-    check_if_toc_transformation_is_complete,
+from rag_pageindex.pageindex.structured_responses import (
+    TocIndexResponse,
+    TocPageNumberResponse,
+    TocTransformResponse,
 )
 from rag_pageindex.pageindex.toc.helpers import convert_page_to_int
 
 
 def toc_transformer(
-    toc_content: str, *, llm: LLMClient
+    toc_content: str, *, llm: LLMClient, max_tokens: int | None = None
 ) -> list[dict[str, Any]]:
-    """Transform raw TOC text into a structured list-of-dicts.
-
-    Loops with continuation prompts until the model emits a complete JSON.
-    """
+    """Transform raw TOC text into a structured list-of-dicts via structured output."""
     logger.debug("toc_transformer: start")
     prompt = render("toc_to_json.j2", toc_content=toc_content)
-    response = llm.complete([{"role": "user", "content": prompt}])
-    last_complete_text = response.content
-    finish_reason = response.finish_reason
-
-    if (
-        check_if_toc_transformation_is_complete(
-            toc_content, last_complete_text, llm=llm
-        )
-        == "yes"
-        and finish_reason == "finished"
-    ):
-        parsed = extract_json(last_complete_text)
-        return convert_page_to_int(parsed["table_of_contents"])
-
-    last_complete_text = get_json_content(last_complete_text)
-
-    attempt = 0
-    if_complete = "no"
-    while not (if_complete == "yes" and finish_reason == "finished"):
-        attempt += 1
-        if attempt > 5:
-            raise RuntimeError(
-                "Failed to complete toc transformation after maximum retries"
-            )
-        position = last_complete_text.rfind("}")
-        if position != -1:
-            last_complete_text = last_complete_text[: position + 2]
-
-        continue_prompt = render(
-            "toc_to_json_continue.j2",
-            raw_toc=toc_content,
-            partial_json=last_complete_text,
-        )
-        new = llm.complete([{"role": "user", "content": continue_prompt}])
-        if new.content.startswith("```json"):
-            last_complete_text += get_json_content(new.content)
-        finish_reason = new.finish_reason
-        if_complete = check_if_toc_transformation_is_complete(
-            toc_content, last_complete_text, llm=llm
-        )
-
-    parsed = extract_json(last_complete_text)
-    return convert_page_to_int(parsed["table_of_contents"])
+    result = llm.complete_structured(
+        [{"role": "user", "content": prompt}],
+        TocTransformResponse,
+        max_tokens=max_tokens,
+    )
+    return convert_page_to_int([e.model_dump() for e in result.table_of_contents])
 
 
 def toc_index_extractor(
@@ -80,8 +42,8 @@ def toc_index_extractor(
         toc=str(toc),
         content=content,
     )
-    response = llm.complete([{"role": "user", "content": prompt}])
-    return extract_json(response.content)
+    result = llm.complete_structured([{"role": "user", "content": prompt}], TocIndexResponse)
+    return [e.model_dump() for e in result.items]
 
 
 def add_page_number_to_toc(
@@ -91,16 +53,11 @@ def add_page_number_to_toc(
     llm: LLMClient,
 ) -> list[dict[str, Any]]:
     """Ask the LLM whether each TOC item starts in `part`; emit physical_index."""
-    import json as _json
-
     structure_str = _json.dumps(structure, indent=2)
     prompt = render(
         "add_page_number_to_toc.j2",
         part=part,
         structure=structure_str,
     )
-    response = llm.complete([{"role": "user", "content": prompt}])
-    json_result = extract_json(response.content)
-    for item in json_result:
-        item.pop("start", None)
-    return json_result
+    result = llm.complete_structured([{"role": "user", "content": prompt}], TocPageNumberResponse)
+    return [e.model_dump(exclude={"start"}) for e in result.items]

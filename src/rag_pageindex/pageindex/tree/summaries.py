@@ -66,14 +66,10 @@ def create_clean_structure_for_description(structure: _Tree) -> _Tree:
             if key in structure:
                 clean[key] = structure[key]
         if structure.get("nodes"):
-            clean["nodes"] = create_clean_structure_for_description(
-                structure["nodes"]
-            )
+            clean["nodes"] = create_clean_structure_for_description(structure["nodes"])
         return clean
     if isinstance(structure, list):
-        return [
-            create_clean_structure_for_description(item) for item in structure
-        ]
+        return [create_clean_structure_for_description(item) for item in structure]
     return structure
 
 

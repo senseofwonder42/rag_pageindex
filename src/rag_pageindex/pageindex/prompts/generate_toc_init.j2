@@ -9,14 +9,16 @@ The provided text contains tags like <physical_index_X> and <physical_index_X> t
 For the physical_index, you need to extract the physical index of the start of the section from the text. Keep the <physical_index_X> format.
 
 The response should be in the following format.
-[
-    {
-        "structure": <structure index, "x.x.x"> (string),
-        "title": <title of the section, keep the original title>,
-        "physical_index": "<physical_index_X> (keep the format)"
-    },
-    ...
-]
+{
+    "items": [
+        {
+            "structure": <structure index, "x.x.x"> (string),
+            "title": <title of the section, keep the original title>,
+            "physical_index": "<physical_index_X> (keep the format)"
+        },
+        ...
+    ]
+}
 
 Directly return the final JSON structure. Do not output anything else.
 

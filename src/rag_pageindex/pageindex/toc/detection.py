@@ -6,9 +6,13 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from rag_pageindex.pageindex.json_extract import extract_json
 from rag_pageindex.pageindex.llm.protocol import LLMClient, Message
 from rag_pageindex.pageindex.prompts import render
+from rag_pageindex.pageindex.structured_responses import (
+    CompletionCheckResponse,
+    PageIndexInTocResponse,
+    TocDetectedResponse,
+)
 
 if TYPE_CHECKING:
     from rag_pageindex.pageindex.pdf import Page
@@ -26,9 +30,8 @@ class TocDetection:
 def toc_detector_single_page(content: str, *, llm: LLMClient) -> str:
     """Ask the LLM whether a single page contains a TOC. Returns 'yes'/'no'."""
     prompt = render("check_toc.j2", content=content)
-    response = llm.complete([{"role": "user", "content": prompt}])
-    json_content = extract_json(response.content)
-    return json_content.get("toc_detected", "no")
+    result = llm.complete_structured([{"role": "user", "content": prompt}], TocDetectedResponse)
+    return result.toc_detected
 
 
 def find_toc_pages(
@@ -71,8 +74,8 @@ def detect_page_index(toc_content: str, *, llm: LLMClient) -> str:
     """Whether the TOC text contains explicit page numbers ('yes'/'no')."""
     logger.debug("detect_page_index")
     prompt = render("detect_page_index.j2", toc_content=toc_content)
-    response = llm.complete([{"role": "user", "content": prompt}])
-    return extract_json(response.content).get("page_index_given_in_toc", "no")
+    result = llm.complete_structured([{"role": "user", "content": prompt}], PageIndexInTocResponse)
+    return result.page_index_given_in_toc
 
 
 def extract_toc_from_pages(
@@ -102,8 +105,8 @@ def check_if_toc_extraction_is_complete(
         content=content,
         toc=toc,
     )
-    response = llm.complete([{"role": "user", "content": prompt}])
-    return extract_json(response.content).get("completed", "no")
+    result = llm.complete_structured([{"role": "user", "content": prompt}], CompletionCheckResponse)
+    return result.completed
 
 
 def check_if_toc_transformation_is_complete(
@@ -117,8 +120,8 @@ def check_if_toc_transformation_is_complete(
         raw_toc=raw_toc,
         cleaned_toc=cleaned_toc,
     )
-    response = llm.complete([{"role": "user", "content": prompt}])
-    return extract_json(response.content).get("completed", "no")
+    result = llm.complete_structured([{"role": "user", "content": prompt}], CompletionCheckResponse)
+    return result.completed
 
 
 def check_toc(
@@ -136,9 +139,7 @@ def check_toc(
     )
     if not toc_page_list:
         logger.info("no toc found")
-        return TocDetection(
-            toc_content=None, toc_page_list=[], page_index_given_in_toc="no"
-        )
+        return TocDetection(toc_content=None, toc_page_list=[], page_index_given_in_toc="no")
 
     logger.info("toc found")
     toc = extract_toc_from_pages(pages, toc_page_list, llm=llm)
@@ -216,9 +217,7 @@ def extract_toc_content(content: str, *, llm: LLMClient) -> str:
     ):
         attempt += 1
         if attempt > 5:
-            raise RuntimeError(
-                "Failed to complete table of contents after maximum retries"
-            )
+            raise RuntimeError("Failed to complete table of contents after maximum retries")
         chat_history = [
             {"role": "user", "content": continue_prompt},
             {"role": "assistant", "content": text},

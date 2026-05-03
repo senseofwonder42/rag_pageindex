@@ -25,7 +25,13 @@ if TYPE_CHECKING:
     from rag_pageindex.core.config import Settings
 
 _KEY_ORDER = [
-    "title", "node_id", "start_index", "end_index", "summary", "text", "nodes",
+    "title",
+    "node_id",
+    "start_index",
+    "end_index",
+    "summary",
+    "text",
+    "nodes",
 ]
 
 _Tree = dict[str, Any] | list[Any]
@@ -77,13 +83,8 @@ async def _build(
         "structure": _format_structure(structure, order=_KEY_ORDER),
     }
 
-    if (
-        settings.pageindex_add_doc_description
-        and settings.pageindex_add_node_summary
-    ):
-        result["doc_description"] = generate_doc_description(
-            structure, llm=llm
-        )
+    if settings.pageindex_add_doc_description and settings.pageindex_add_node_summary:
+        result["doc_description"] = generate_doc_description(structure, llm=llm)
 
     return result
 
