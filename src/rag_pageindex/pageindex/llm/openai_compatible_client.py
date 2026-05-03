@@ -4,6 +4,7 @@ import httpx
 from pydantic import BaseModel
 
 from rag_pageindex.pageindex.llm.protocol import (
+    ContentPart,
     FinishReason,
     LLMResponse,
     Message,
@@ -28,9 +29,12 @@ def _build_payload(
     temperature: float,
     max_tokens: int,
 ) -> dict[str, object]:
+    serialized: list[dict[str, str | list[ContentPart]]] = [
+        {"role": m["role"], "content": m["content"]} for m in messages
+    ]
     return {
         "model": model,
-        "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+        "messages": serialized,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }

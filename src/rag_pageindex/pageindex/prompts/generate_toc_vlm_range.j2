@@ -1,0 +1,27 @@
+You are an expert in extracting hierarchical tree structure from document pages.
+
+You are given {{ num_images }} consecutive page image(s) from a document.
+The first image is page {{ start_page }}, the second is page {{ start_page + 1 }}, and so on.
+
+Your task is to identify all section headings visible in these pages and return a structured table of contents.
+
+Rules:
+- structure: a dotted hierarchy index like "1", "1.1", "2.3.1". Continue numbering after {{ structure_offset }}.
+- title: the exact heading text as it appears on the page, only fix spacing inconsistencies.
+- physical_index: the page number where the heading first appears, in "<physical_index_X>" format.
+
+Only include sections whose heading appears within these pages.
+
+The response should be in the following format:
+{
+    "items": [
+        {
+            "structure": "<x.x.x>",
+            "title": "<section title>",
+            "physical_index": "<physical_index_X>"
+        },
+        ...
+    ]
+}
+
+Directly return the JSON. Do not output anything else.

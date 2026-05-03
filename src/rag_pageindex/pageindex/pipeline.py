@@ -65,7 +65,7 @@ async def _build(
         sum(p.token_length for p in pages),
     )
 
-    structure = await tree_parser(pages, llm=llm, settings=settings)
+    structure = await tree_parser(pages, llm=llm, settings=settings, source=source)
 
     if settings.pageindex_add_node_id:
         write_node_id(structure)

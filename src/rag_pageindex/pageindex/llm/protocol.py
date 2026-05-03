@@ -9,9 +9,28 @@ FinishReason = Literal["finished", "max_output_reached", "error"]
 _T = TypeVar("_T", bound=BaseModel)
 
 
+class ImageUrl(TypedDict):
+    """OpenAI-style image URL — use a data: URI for base64-encoded images."""
+
+    url: str
+
+
+class TextPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class ImageUrlPart(TypedDict):
+    type: Literal["image_url"]
+    image_url: ImageUrl
+
+
+ContentPart = TextPart | ImageUrlPart
+
+
 class Message(TypedDict):
     role: Role
-    content: str
+    content: str | list[ContentPart]
 
 
 @dataclass(frozen=True, slots=True)

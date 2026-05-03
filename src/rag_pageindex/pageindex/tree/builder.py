@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
-from rag_pageindex.pageindex.pdf.reader import Page
+from rag_pageindex.pageindex.pdf.reader import Page, PdfSource
 from rag_pageindex.pageindex.toc.detection import check_toc
 from rag_pageindex.pageindex.toc.page_mapping import (
     process_no_toc,
@@ -148,6 +148,7 @@ async def meta_processor(
     start_index: int = 1,
     llm: LLMClient,
     settings: Settings,
+    source: PdfSource | None = None,
 ) -> list[dict[str, Any]]:
     """Run the appropriate TOC extraction path and return verified items."""
     logger.info("meta_processor mode={} start_index={}", mode, start_index)
@@ -193,8 +194,8 @@ async def meta_processor(
     if accuracy == 1.0 and not incorrect:
         return toc
 
-    if accuracy > 0.6 and incorrect:
-        toc, _ = await fix_incorrect_toc_with_retries(
+    if accuracy > settings.pageindex_vision_fallback_threshold and incorrect:
+        toc, still_incorrect = await fix_incorrect_toc_with_retries(
             toc,
             pages,
             incorrect,
@@ -202,6 +203,18 @@ async def meta_processor(
             max_attempts=3,
             llm=llm,
         )
+        if still_incorrect and source is not None and settings.pageindex_vision_mode == "fallback":
+            from rag_pageindex.pageindex.toc.verification_vlm import fix_incorrect_toc_with_vlm
+
+            toc, _ = await fix_incorrect_toc_with_vlm(
+                toc,
+                pages,
+                still_incorrect,
+                source,
+                start_index=start_index,
+                dpi=settings.pageindex_vision_dpi,
+                llm=llm,
+            )
         return toc
 
     if mode == "process_toc_with_page_numbers":
@@ -213,6 +226,7 @@ async def meta_processor(
             start_index=start_index,
             llm=llm,
             settings=settings,
+            source=source,
         )
     if mode == "process_toc_no_page_numbers":
         return await meta_processor(
@@ -221,7 +235,33 @@ async def meta_processor(
             start_index=start_index,
             llm=llm,
             settings=settings,
+            source=source,
         )
+
+    # process_no_toc failed verification — try VLM re-extraction if enabled
+    if source is not None and settings.pageindex_vision_mode == "fallback":
+        from rag_pageindex.pageindex.toc.parsing_vlm import regenerate_path_c_range_vlm
+
+        end_page = len(pages) + start_index - 1
+        logger.info(
+            "meta_processor: VLM re-extraction for pages {}-{} (accuracy={:.2%})",
+            start_index,
+            end_page,
+            accuracy,
+        )
+        vlm_toc = await regenerate_path_c_range_vlm(
+            source,
+            start_page=start_index,
+            end_page=end_page,
+            dpi=settings.pageindex_vision_dpi,
+            llm=llm,
+        )
+        if vlm_toc:
+            vlm_toc = validate_and_truncate_physical_indices(
+                vlm_toc, len(pages), start_index=start_index
+            )
+            return vlm_toc
+
     logger.warning(
         "meta_processor: process_no_toc verification failed (accuracy={:.2%}, incorrect={})"
         " — returning best-effort toc",
@@ -237,6 +277,7 @@ async def process_large_node_recursively(
     *,
     llm: LLMClient,
     settings: Settings,
+    source: PdfSource | None = None,
 ) -> dict[str, Any]:
     """Recursively split oversized nodes using the no-TOC extraction path."""
     node_pages = pages[node["start_index"] - 1 : node["end_index"]]
@@ -260,6 +301,7 @@ async def process_large_node_recursively(
             start_index=node["start_index"],
             llm=llm,
             settings=settings,
+            source=source,
         )
         sub_toc = await check_title_appearance_in_start_concurrent(sub_toc, pages, llm=llm)
         valid_sub = [item for item in sub_toc if item.get("physical_index") is not None]
@@ -276,7 +318,7 @@ async def process_large_node_recursively(
 
     if node.get("nodes"):
         tasks = [
-            process_large_node_recursively(child, pages, llm=llm, settings=settings)
+            process_large_node_recursively(child, pages, llm=llm, settings=settings, source=source)
             for child in node["nodes"]
         ]
         await asyncio.gather(*tasks)
@@ -289,6 +331,7 @@ async def tree_parser(
     *,
     llm: LLMClient,
     settings: Settings,
+    source: PdfSource | None = None,
 ) -> list[dict[str, Any]]:
     """Main async entry: detect TOC, build tree, verify, split large nodes."""
     toc_detection = check_toc(
@@ -311,6 +354,7 @@ async def tree_parser(
             toc_page_list=toc_detection.toc_page_list,
             llm=llm,
             settings=settings,
+            source=source,
         )
     else:
         toc = await meta_processor(
@@ -319,6 +363,7 @@ async def tree_parser(
             start_index=1,
             llm=llm,
             settings=settings,
+            source=source,
         )
 
     toc = add_preface_if_needed(toc)
@@ -326,7 +371,10 @@ async def tree_parser(
     valid_toc = [item for item in toc if item.get("physical_index") is not None]
     tree = post_processing(valid_toc, len(pages))
 
-    tasks = [process_large_node_recursively(node, pages, llm=llm, settings=settings) for node in tree]
+    tasks = [
+        process_large_node_recursively(node, pages, llm=llm, settings=settings, source=source)
+        for node in tree
+    ]
     await asyncio.gather(*tasks)
 
     return tree

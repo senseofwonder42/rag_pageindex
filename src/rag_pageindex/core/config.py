@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     pageindex_add_node_text: bool = False
     pageindex_add_doc_description: bool = False
 
+    # VLM fallback: render page images when text verification fails
+    pageindex_vision_mode: Literal["off", "fallback"] = "off"
+    pageindex_vision_dpi: int = 144
+    pageindex_vision_fallback_threshold: float = 0.6
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Priority: init > env vars > .env file > config.yaml > defaults

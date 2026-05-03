@@ -1,4 +1,7 @@
+from typing import TypeVar
+
 from anthropic import Anthropic, AsyncAnthropic
+from pydantic import BaseModel
 
 from rag_pageindex.pageindex.llm.protocol import (
     FinishReason,
@@ -6,6 +9,17 @@ from rag_pageindex.pageindex.llm.protocol import (
     Message,
 )
 from rag_pageindex.pageindex.llm.retry import awith_retries, with_retries
+
+_T = TypeVar("_T", bound=BaseModel)
+
+
+def _check_no_multimodal(messages: list[Message]) -> None:
+    for msg in messages:
+        if isinstance(msg["content"], list):
+            raise NotImplementedError(
+                "AnthropicClient does not support multimodal content blocks. "
+                "Use OpenAICompatibleClient with a vision-capable model."
+            )
 
 
 def _split_system(
@@ -16,11 +30,10 @@ def _split_system(
     rest: list[Message] = []
     for msg in messages:
         if msg["role"] == "system":
-            system = (
-                msg["content"]
-                if system is None
-                else f"{system}\n\n{msg['content']}"
-            )
+            content = msg["content"]
+            if not isinstance(content, str):
+                raise TypeError("System message content must be str for AnthropicClient")
+            system = content if system is None else f"{system}\n\n{content}"
         else:
             rest.append(msg)
     return system, rest
@@ -62,6 +75,7 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        _check_no_multimodal(messages)
         system, rest = _split_system(messages)
 
         def _call() -> LLMResponse:
@@ -97,6 +111,7 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        _check_no_multimodal(messages)
         system, rest = _split_system(messages)
 
         async def _call() -> LLMResponse:
@@ -123,6 +138,30 @@ class AnthropicClient:
             _call,
             max_retries=self._max_retries,
             delay_s=self._retry_delay_s,
+        )
+
+    def complete_structured(
+        self,
+        messages: list[Message],
+        response_model: type[_T],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> _T:
+        raise NotImplementedError(
+            "AnthropicClient does not implement complete_structured. Use OpenAICompatibleClient."
+        )
+
+    async def acomplete_structured(
+        self,
+        messages: list[Message],
+        response_model: type[_T],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> _T:
+        raise NotImplementedError(
+            "AnthropicClient does not implement acomplete_structured. Use OpenAICompatibleClient."
         )
 
     def count_tokens(self, text: str) -> int:
