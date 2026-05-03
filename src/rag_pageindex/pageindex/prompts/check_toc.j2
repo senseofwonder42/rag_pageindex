@@ -1,12 +1,22 @@
-Your job is to detect if there is a table of content provided in the given text.
+Your job is to detect whether the given text is a dedicated Table of Contents (TOC) page.
+
+A Table of Contents is a dedicated, clearly labeled section — typically titled "Contents", "Table of Contents", or similar — that lists the major sections or chapters of the entire document along with their page numbers or page references. It exists solely to help readers navigate the document and occupies a distinct block separate from the document body.
+
+The following are NOT a Table of Contents:
+- Section headings or numbered sections within the document body (e.g., "1. Introduction", "2. Methods")
+- Abstract, summary, or executive summary sections
+- Lists of figures, tables, algorithms, or symbols
+- Keyword or topic lists
+- Author affiliations, acknowledgements, or references
+- An index at the back of the document
+
+Important: Academic papers, journal articles, and conference papers almost never contain a Table of Contents. Only books, long technical reports, theses, or formal standards documents typically include one.
 
 Given text: {{ content }}
 
-return the following JSON format:
+Return the following JSON format:
 {
-    "thinking": <why do you think there is a table of content in the given text>,
     "toc_detected": "<yes or no>"
 }
 
 Directly return the final JSON structure. Do not output anything else.
-Please note: abstract, summary, notation list, figure list, table list, etc. are not table of contents.

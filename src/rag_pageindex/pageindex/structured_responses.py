@@ -6,32 +6,26 @@ from pydantic import BaseModel, Field
 
 
 class TocDetectedResponse(BaseModel):
-    thinking: str
     toc_detected: Literal["yes", "no"]
 
 
 class PageIndexInTocResponse(BaseModel):
-    thinking: str
     page_index_given_in_toc: Literal["yes", "no"]
 
 
 class CompletionCheckResponse(BaseModel):
-    thinking: str
     completed: Literal["yes", "no"]
 
 
 class TitleAppearanceResponse(BaseModel):
-    thinking: str
     answer: Literal["yes", "no"]
 
 
 class TitleStartResponse(BaseModel):
-    thinking: str
     start_begin: Literal["yes", "no"]
 
 
 class PhysicalIndexResponse(BaseModel):
-    thinking: str
     physical_index: str | None = Field(
         default=None,
         description='Physical page index in "<physical_index_X>" format, or null',
