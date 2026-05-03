@@ -16,6 +16,11 @@ def convert_physical_index_to_int(
                         item["physical_index"] = int(value.split("_")[-1].rstrip(">").strip())
                     elif value.startswith("physical_index_"):
                         item["physical_index"] = int(value.split("_")[-1].strip())
+                    else:
+                        try:
+                            item["physical_index"] = int(value.strip())
+                        except ValueError:
+                            item["physical_index"] = None
         return data
     if isinstance(data, str):
         if data.startswith("<physical_index_"):

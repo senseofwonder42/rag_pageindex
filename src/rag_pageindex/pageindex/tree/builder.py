@@ -222,7 +222,13 @@ async def meta_processor(
             llm=llm,
             settings=settings,
         )
-    raise RuntimeError("meta_processor: all fallback modes exhausted")
+    logger.warning(
+        "meta_processor: process_no_toc verification failed (accuracy={:.2%}, incorrect={})"
+        " — returning best-effort toc",
+        accuracy,
+        len(incorrect),
+    )
+    return toc
 
 
 async def process_large_node_recursively(
