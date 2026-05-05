@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import ContentPart, LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import PdfSource
 from rag_pageindex.pageindex.pdf.renderer import image_part, render_pages
 from rag_pageindex.pageindex.prompts import render
@@ -12,6 +13,7 @@ from rag_pageindex.pageindex.structured_responses import TocGeneratedResponse
 from rag_pageindex.pageindex.toc.helpers import convert_physical_index_to_int
 
 
+@observe(name="regenerate_path_c_range_vlm")
 async def regenerate_path_c_range_vlm(
     source: PdfSource,
     start_page: int,

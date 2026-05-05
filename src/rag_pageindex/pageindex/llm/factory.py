@@ -4,8 +4,7 @@ from rag_pageindex.pageindex.llm.openai_compatible_client import OpenAICompatibl
 from rag_pageindex.pageindex.llm.protocol import LLMClient
 
 
-def get_default_client(settings: Settings) -> LLMClient:
-    """Build the configured `LLMClient` from `Settings`."""
+def _build_base_client(settings: Settings) -> LLMClient:
     if settings.llm_provider == "anthropic":
         if settings.anthropic_api_key is None:
             raise RuntimeError("ANTHROPIC_API_KEY is not set; cannot build AnthropicClient.")
@@ -29,3 +28,26 @@ def get_default_client(settings: Settings) -> LLMClient:
             timeout=settings.llm_timeout,
         )
     raise RuntimeError(f"Unknown llm_provider: {settings.llm_provider}")
+
+
+def get_default_client(settings: Settings) -> LLMClient:
+    """Build the configured `LLMClient` from `Settings`.
+
+    When `settings.tracing_enabled`, wraps the client in `TracingLLMClient`
+    so every call is recorded as a Langfuse generation. Importing the
+    Langfuse SDK is deferred to keep the no-tracing path cheap.
+    """
+    client = _build_base_client(settings)
+    if not settings.tracing_enabled:
+        return client
+
+    if settings.langfuse_public_key is None or settings.langfuse_secret_key is None:
+        raise RuntimeError(
+            "tracing_enabled=True but LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are not set."
+        )
+
+    from langfuse import get_client
+
+    from rag_pageindex.pageindex.llm.tracing_client import TracingLLMClient
+
+    return TracingLLMClient(client, langfuse=get_client())

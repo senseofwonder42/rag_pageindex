@@ -7,6 +7,7 @@ from typing import Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import Page
 from rag_pageindex.pageindex.prompts import render
 from rag_pageindex.pageindex.structured_responses import (
@@ -83,6 +84,7 @@ async def check_title_appearance_in_start(
     return result.start_begin
 
 
+@observe(name="check_title_appearance_in_start_concurrent")
 async def check_title_appearance_in_start_concurrent(
     structure: list[dict[str, Any]],
     pages: list[Page],
@@ -118,6 +120,7 @@ async def check_title_appearance_in_start_concurrent(
     return structure
 
 
+@observe(name="verify_toc")
 async def verify_toc(
     pages: list[Page],
     list_result: list[dict[str, Any]],
@@ -264,6 +267,7 @@ async def fix_incorrect_toc(
     return toc_items, invalid
 
 
+@observe(name="fix_incorrect_toc_with_retries")
 async def fix_incorrect_toc_with_retries(
     toc_items: list[dict[str, Any]],
     pages: list[Page],

@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import ContentPart, LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import Page, PdfSource
 from rag_pageindex.pageindex.pdf.renderer import image_part, render_pages
 from rag_pageindex.pageindex.prompts import render
@@ -41,6 +42,7 @@ async def _vlm_locate_title(
     return convert_physical_index_to_int(result.physical_index)
 
 
+@observe(name="fix_incorrect_toc_with_vlm")
 async def fix_incorrect_toc_with_vlm(
     toc_items: list[dict[str, Any]],
     pages: list[Page],

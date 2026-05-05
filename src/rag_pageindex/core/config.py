@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     pageindex_vision_dpi: int = 144
     pageindex_vision_fallback_threshold: float = 0.6
 
+    # Langfuse tracing (off by default)
+    tracing_enabled: bool = False
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Priority: init > env vars > .env file > config.yaml > defaults

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import Page, PdfSource
 from rag_pageindex.pageindex.toc.detection import check_toc
 from rag_pageindex.pageindex.toc.page_mapping import (
@@ -139,6 +140,7 @@ def add_node_text(node: dict[str, Any] | list[Any], pages: list[Page]) -> None:
             add_node_text(item, pages)
 
 
+@observe(name="meta_processor")
 async def meta_processor(
     pages: list[Page],
     mode: str,
@@ -271,6 +273,7 @@ async def meta_processor(
     return toc
 
 
+@observe(name="process_large_node")
 async def process_large_node_recursively(
     node: dict[str, Any],
     pages: list[Page],
@@ -326,6 +329,7 @@ async def process_large_node_recursively(
     return node
 
 
+@observe(name="tree_parser")
 async def tree_parser(
     pages: list[Page],
     *,

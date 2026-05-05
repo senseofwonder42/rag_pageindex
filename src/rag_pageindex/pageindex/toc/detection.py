@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient, Message
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.prompts import render
 from rag_pageindex.pageindex.structured_responses import (
     CompletionCheckResponse,
@@ -124,6 +125,7 @@ def check_if_toc_transformation_is_complete(
     return result.completed
 
 
+@observe(name="check_toc")
 def check_toc(
     pages: list[Page],
     *,
@@ -183,6 +185,7 @@ def check_toc(
     )
 
 
+@observe(name="extract_toc_content")
 def extract_toc_content(content: str, *, llm: LLMClient) -> str:
     """Have the LLM extract a TOC verbatim from the given text, with continuation."""
     prompt = render("extract_toc_content.j2", content=content)

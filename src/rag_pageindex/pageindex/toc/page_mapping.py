@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import Page
 from rag_pageindex.pageindex.prompts import render
 from rag_pageindex.pageindex.structured_responses import TocGeneratedResponse
@@ -173,6 +174,7 @@ def process_none_page_numbers(
     return toc_items
 
 
+@observe(name="process_toc_with_page_numbers")
 def process_toc_with_page_numbers(
     toc_content: str,
     toc_page_list: list[int],
@@ -222,6 +224,7 @@ def process_toc_with_page_numbers(
     return toc_with_page_number
 
 
+@observe(name="process_toc_no_page_numbers")
 def process_toc_no_page_numbers(
     toc_content: str,
     pages: list[Page],
@@ -246,6 +249,7 @@ def process_toc_no_page_numbers(
     return convert_physical_index_to_int(toc_with_page_number)
 
 
+@observe(name="process_no_toc")
 def process_no_toc(
     pages: list[Page],
     *,

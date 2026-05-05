@@ -5,6 +5,7 @@ import json as _json
 from typing import Any
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.prompts import render
 
 _Tree = dict[str, Any] | list[Any]
@@ -44,6 +45,7 @@ async def generate_node_summary(node: dict[str, Any], *, llm: LLMClient) -> str:
     return response.content
 
 
+@observe(name="generate_summaries_for_structure")
 async def generate_summaries_for_structure(
     structure: list[dict[str, Any]],
     *,
@@ -73,6 +75,7 @@ def create_clean_structure_for_description(structure: _Tree) -> _Tree:
     return structure
 
 
+@observe(name="generate_doc_description")
 def generate_doc_description(structure: _Tree, *, llm: LLMClient) -> str:
     """Generate a one-sentence document description from the tree structure."""
     clean = create_clean_structure_for_description(structure)

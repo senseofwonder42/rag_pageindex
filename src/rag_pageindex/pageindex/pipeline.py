@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from rag_pageindex.pageindex.llm.protocol import LLMClient
+from rag_pageindex.pageindex.observability import observe
 from rag_pageindex.pageindex.pdf.reader import (
     PdfSource,
     get_pdf_name,
@@ -50,6 +51,7 @@ def _format_structure(structure: _Tree, *, order: list[str]) -> _Tree:
     return structure
 
 
+@observe(name="page_index_builder")
 async def _build(
     source: PdfSource,
     *,
