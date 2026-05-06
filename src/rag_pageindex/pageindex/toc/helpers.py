@@ -6,7 +6,17 @@ from typing import Any
 def convert_physical_index_to_int(
     data: Any,  # noqa: ANN401
 ) -> Any:  # noqa: ANN401
-    """Normalize <physical_index_X> tokens into plain ints in-place."""
+    """Normalize physical_index values to integers.
+
+    Handles various string formats (<physical_index_X>, physical_index_X, or plain ints).
+    Modifies lists/dicts in-place; returns integers and scalars as-is.
+
+    Args:
+        data: Scalar, string, dict, or list to normalize.
+
+    Returns:
+        Modified data with physical_index fields as ints (or None on parse failure).
+    """
     if isinstance(data, list):
         for item in data:
             if isinstance(item, dict) and "physical_index" in item:
@@ -36,7 +46,16 @@ def convert_physical_index_to_int(
 def convert_page_to_int(
     data: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Cast stringified page numbers to int; leave on failure."""
+    """Convert stringified page numbers to integers in-place.
+
+    Silently leaves page numbers that cannot be parsed as invalid strings.
+
+    Args:
+        data: List of dicts with potential 'page' fields.
+
+    Returns:
+        Modified list with parsed page numbers.
+    """
     for item in data:
         if "page" in item and isinstance(item["page"], str):
             try:
@@ -49,7 +68,14 @@ def convert_page_to_int(
 def remove_page_number(
     data: dict[str, Any] | list[Any],
 ) -> dict[str, Any] | list[Any]:
-    """Strip 'page_number' / 'page' keys throughout a nested structure."""
+    """Recursively remove 'page_number' fields from nested structures.
+
+    Args:
+        data: Dict, list, or nested combination to modify.
+
+    Returns:
+        Modified data without 'page_number' fields.
+    """
     if isinstance(data, dict):
         data.pop("page_number", None)
         for key in list(data.keys()):

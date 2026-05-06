@@ -29,7 +29,15 @@ class TocDetection:
 
 
 def toc_detector_single_page(content: str, *, llm: LLMClient) -> str:
-    """Ask the LLM whether a single page contains a TOC. Returns 'yes'/'no'."""
+    """Check if a single page contains a table of contents.
+
+    Args:
+        content: Text content of the page.
+        llm: LLM client for classification.
+
+    Returns:
+        'yes' if page contains TOC, 'no' otherwise.
+    """
     prompt = render("check_toc.j2", content=content)
     result = llm.complete_structured([{"role": "user", "content": prompt}], TocDetectedResponse)
     return result.toc_detected
@@ -42,7 +50,20 @@ def find_toc_pages(
     toc_check_page_num: int,
     llm: LLMClient,
 ) -> list[int]:
-    """Walk pages looking for a contiguous TOC region; return its indices."""
+    """Find contiguous pages containing a table of contents.
+
+    Scans forward from start_page_index until toc_check_page_num, collecting
+    pages marked as TOC. Stops at the first non-TOC page after TOC pages end.
+
+    Args:
+        pages: List of PDF pages.
+        start_page_index: Page index to start scanning from.
+        toc_check_page_num: Maximum page to scan up to.
+        llm: LLM client for TOC detection.
+
+    Returns:
+        List of page indices containing the TOC (empty if none found).
+    """
     last_page_was_toc = False
     toc_page_list: list[int] = []
     i = start_page_index
@@ -66,13 +87,32 @@ def find_toc_pages(
 
 
 def _transform_dots_to_colon(text: str) -> str:
+    """Normalize TOC dot leaders to colon separators.
+
+    Replaces multiple dots or repeated dot-space patterns with ': '
+    to normalize TOC formatting from OCR or PDF extraction.
+
+    Args:
+        text: TOC text potentially containing dot leaders.
+
+    Returns:
+        Text with normalized separators.
+    """
     text = re.sub(r"\.{5,}", ": ", text)
     text = re.sub(r"(?:\. ){5,}\.?", ": ", text)
     return text
 
 
 def detect_page_index(toc_content: str, *, llm: LLMClient) -> str:
-    """Whether the TOC text contains explicit page numbers ('yes'/'no')."""
+    """Check if TOC contains explicit page numbers.
+
+    Args:
+        toc_content: Extracted TOC text.
+        llm: LLM client for classification.
+
+    Returns:
+        'yes' if page numbers are present, 'no' otherwise.
+    """
     logger.debug("detect_page_index")
     prompt = render("detect_page_index.j2", toc_content=toc_content)
     result = llm.complete_structured([{"role": "user", "content": prompt}], PageIndexInTocResponse)
@@ -85,7 +125,16 @@ def extract_toc_from_pages(
     *,
     llm: LLMClient,
 ) -> dict[str, str]:
-    """Concatenate TOC pages, normalize, and detect whether page numbers exist."""
+    """Concatenate TOC pages, normalize formatting, and detect page numbers.
+
+    Args:
+        pages: List of PDF pages.
+        toc_page_list: Indices of pages containing the TOC.
+        llm: LLM client for page number detection.
+
+    Returns:
+        Dict with 'toc_content' and 'page_index_given_in_toc' ('yes'/'no').
+    """
     toc_content = "".join(pages[i].text for i in toc_page_list)
     toc_content = _transform_dots_to_colon(toc_content)
     page_index_given_in_toc = detect_page_index(toc_content, llm=llm)
@@ -101,6 +150,16 @@ def check_if_toc_extraction_is_complete(
     *,
     llm: LLMClient,
 ) -> str:
+    """Check if extracted TOC content is complete.
+
+    Args:
+        content: Original page content.
+        toc: Extracted TOC text.
+        llm: LLM client for verification.
+
+    Returns:
+        'yes' if extraction is complete, 'no' otherwise.
+    """
     prompt = render(
         "check_toc_extraction_complete.j2",
         content=content,
@@ -116,6 +175,16 @@ def check_if_toc_transformation_is_complete(
     *,
     llm: LLMClient,
 ) -> str:
+    """Check if TOC transformation/cleaning is complete.
+
+    Args:
+        raw_toc: Original TOC text.
+        cleaned_toc: Transformed TOC text.
+        llm: LLM client for verification.
+
+    Returns:
+        'yes' if transformation is complete, 'no' otherwise.
+    """
     prompt = render(
         "check_toc_transformation_complete.j2",
         raw_toc=raw_toc,
@@ -132,7 +201,20 @@ def check_toc(
     toc_check_page_num: int,
     llm: LLMClient,
 ) -> TocDetection:
-    """Scan the doc for a TOC region; iterate forward if first attempt has no page numbers."""
+    """Scan document for a table of contents and extract its content.
+
+    Iterates forward through pages looking for contiguous TOC pages. If
+    the initial TOC has no page numbers, continues scanning to find an
+    extended TOC with page numbers.
+
+    Args:
+        pages: List of PDF pages.
+        toc_check_page_num: Maximum page to scan for TOC.
+        llm: LLM client for detection and analysis.
+
+    Returns:
+        TocDetection with toc_content, toc_page_list, and page_index_given_in_toc.
+    """
     toc_page_list = find_toc_pages(
         pages,
         start_page_index=0,
@@ -187,7 +269,22 @@ def check_toc(
 
 @observe(name="extract_toc_content")
 def extract_toc_content(content: str, *, llm: LLMClient) -> str:
-    """Have the LLM extract a TOC verbatim from the given text, with continuation."""
+    """Extract and complete a table of contents from document text.
+
+    Uses multi-turn conversation with the LLM to extract the TOC verbatim
+    and iteratively request continuation until the extraction is complete
+    (max 5 continuation attempts).
+
+    Args:
+        content: Document text to extract TOC from.
+        llm: LLM client for extraction.
+
+    Returns:
+        Complete extracted TOC text.
+
+    Raises:
+        RuntimeError: If completion fails after maximum retry attempts.
+    """
     prompt = render("extract_toc_content.j2", content=content)
     response = llm.complete([{"role": "user", "content": prompt}])
     text = response.content

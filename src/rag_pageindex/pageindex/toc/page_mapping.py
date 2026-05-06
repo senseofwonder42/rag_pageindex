@@ -24,6 +24,15 @@ from rag_pageindex.pageindex.toc.parsing import (
 
 
 def _generate_toc_init(part: str, *, llm: LLMClient) -> list[dict[str, Any]]:
+    """Generate initial TOC structure from document text.
+
+    Args:
+        part: Document text to extract TOC from.
+        llm: LLM client for extraction.
+
+    Returns:
+        List of TOC items (dicts with structure, title, physical_index).
+    """
     prompt = render("generate_toc_init.j2", part=part)
     result = llm.complete_structured([{"role": "user", "content": prompt}], TocGeneratedResponse)
     return [e.model_dump() for e in result.items]
@@ -35,6 +44,16 @@ def _generate_toc_continue(
     *,
     llm: LLMClient,
 ) -> list[dict[str, Any]]:
+    """Continue generating TOC structure given previous partial results.
+
+    Args:
+        toc_content: Previously generated TOC items (for context).
+        part: Next document text chunk.
+        llm: LLM client for extraction.
+
+    Returns:
+        List of additional TOC items.
+    """
     prompt = render(
         "generate_toc_continue.j2",
         part=part,
@@ -51,7 +70,20 @@ def page_list_to_group_text(
     overlap_page: int = 1,
     start_index: int = 1,
 ) -> list[str]:
-    """Divide pages into text groups that each fit within `max_tokens`."""
+    """Divide pages into text chunks, each within token limit, with overlap.
+
+    Groups pages to balance load, maintaining a small overlap window for
+    context between groups. Useful for TOC generation on large documents.
+
+    Args:
+        pages: List of PDF pages with token counts.
+        max_tokens: Target token limit per group.
+        overlap_page: Number of pages to overlap between groups.
+        start_index: Starting page number for physical_index tags (1-indexed).
+
+    Returns:
+        List of text strings, each with physical_index markers.
+    """
     page_contents = [
         (f"<physical_index_{start_index + i}>\n{p.text}\n<physical_index_{start_index + i}>\n\n")
         for i, p in enumerate(pages)
@@ -89,7 +121,18 @@ def extract_matching_page_pairs(
     toc_physical_index: list[dict[str, Any]],
     start_page_index: int,
 ) -> list[dict[str, Any]]:
-    """Match TOC items by title to get (page, physical_index) pairs."""
+    """Match TOC items from two sources by title to get (page, physical_index) pairs.
+
+    Helps calibrate the offset between page numbers in TOC and physical page indices.
+
+    Args:
+        toc_page: TOC items extracted from TOC pages.
+        toc_physical_index: TOC items extracted from page content.
+        start_page_index: Minimum acceptable physical index.
+
+    Returns:
+        List of matched items with title, page, and physical_index.
+    """
     pairs = []
     for phy_item in toc_physical_index:
         for page_item in toc_page:
@@ -107,7 +150,17 @@ def extract_matching_page_pairs(
 
 
 def calculate_page_offset(pairs: list[dict[str, Any]]) -> int | None:
-    """Return the most common (physical_index - page) difference."""
+    """Calculate the most common page number offset from matched pairs.
+
+    Returns the mode of (physical_index - page) differences, useful for
+    converting between page numbers in TOC and physical document indices.
+
+    Args:
+        pairs: List of matched {title, page, physical_index} dicts.
+
+    Returns:
+        Most common offset, or None if no valid pairs.
+    """
     differences: list[int] = []
     for pair in pairs:
         try:

@@ -14,11 +14,22 @@ def with_retries(
     max_retries: int,
     delay_s: float,
 ) -> T:
-    """Call `fn`; on exception, retry up to `max_retries` times.
+    """Call a function with exponential backoff retry logic.
 
+    Retries on any exception, with a fixed delay between attempts.
     `max_retries` is the total attempt count; values < 1 are clamped to 1
-    (one attempt, no retries). Re-raises the final exception so callers
-    can decide what to do.
+    (one attempt, no retries). Re-raises the final exception.
+
+    Args:
+        fn: Callable with no arguments to invoke.
+        max_retries: Total number of attempts (not additional retries).
+        delay_s: Delay in seconds between attempts.
+
+    Returns:
+        Result of fn() if successful.
+
+    Raises:
+        Final exception from fn() if all attempts fail.
     """
     attempts = max(1, max_retries)
     last_exc: BaseException | None = None
@@ -45,7 +56,22 @@ async def awith_retries(
     max_retries: int,
     delay_s: float,
 ) -> T:
-    """Async variant of `with_retries`."""
+    """Asynchronously call a function with retry logic.
+
+    Async variant of with_retries(). Retries on any exception with a
+    fixed delay between attempts. Re-raises the final exception.
+
+    Args:
+        fn: Async callable with no arguments to invoke.
+        max_retries: Total number of attempts (not additional retries).
+        delay_s: Delay in seconds between attempts.
+
+    Returns:
+        Result of fn() if successful.
+
+    Raises:
+        Final exception from fn() if all attempts fail.
+    """
     attempts = max(1, max_retries)
     last_exc: BaseException | None = None
     for attempt in range(attempts):

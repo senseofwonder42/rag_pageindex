@@ -5,7 +5,17 @@ from loguru import logger
 
 
 def get_json_content(response: str) -> str:
-    """Strip ```json ... ``` fences from a model response."""
+    """Extract JSON content by removing markdown code fences.
+
+    Strips the ```json ... ``` fence markers if present, returning the
+    raw JSON content between them (or the entire string if no fences).
+
+    Args:
+        response: Model response potentially containing JSON code fences.
+
+    Returns:
+        JSON content with fences removed and whitespace stripped.
+    """
     start_idx = response.find("```json")
     if start_idx != -1:
         start_idx += 7
@@ -19,10 +29,17 @@ def get_json_content(response: str) -> str:
 
 
 def extract_json(content: str) -> Any:  # noqa: ANN401
-    """Parse model-emitted JSON, tolerating common formatting issues.
+    """Parse JSON from model output, tolerating common formatting issues.
 
-    Returns `{}` on unrecoverable failures so downstream `.get()` calls don't
-    crash — matching upstream behavior.
+    Handles JSON code fences, replaces Python None with null, normalizes
+    whitespace, and recovers from trailing commas. Returns empty dict on
+    parse failure to prevent downstream crashes on `.get()` calls.
+
+    Args:
+        content: Raw model output potentially containing JSON.
+
+    Returns:
+        Parsed JSON object/array, or empty dict on unrecoverable error.
     """
     try:
         start_idx = content.find("```json")

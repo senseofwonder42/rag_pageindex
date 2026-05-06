@@ -49,7 +49,9 @@ class LLMClient(Protocol):
     """
 
     @property
-    def model(self) -> str: ...
+    def model(self) -> str:
+        """Get the model identifier."""
+        ...
 
     def complete(
         self,
@@ -57,7 +59,18 @@ class LLMClient(Protocol):
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-    ) -> LLMResponse: ...
+    ) -> LLMResponse:
+        """Synchronous text completion.
+
+        Args:
+            messages: Conversation messages.
+            temperature: Sampling temperature.
+            max_tokens: Max output tokens.
+
+        Returns:
+            LLMResponse with generated content and finish reason.
+        """
+        ...
 
     async def acomplete(
         self,
@@ -65,7 +78,18 @@ class LLMClient(Protocol):
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-    ) -> LLMResponse: ...
+    ) -> LLMResponse:
+        """Asynchronous text completion.
+
+        Args:
+            messages: Conversation messages.
+            temperature: Sampling temperature.
+            max_tokens: Max output tokens.
+
+        Returns:
+            LLMResponse with generated content and finish reason.
+        """
+        ...
 
     def complete_structured(
         self,
@@ -74,7 +98,19 @@ class LLMClient(Protocol):
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-    ) -> _T: ...
+    ) -> _T:
+        """Synchronous structured output completion.
+
+        Args:
+            messages: Conversation messages.
+            response_model: Pydantic model for structured response.
+            temperature: Sampling temperature.
+            max_tokens: Max output tokens.
+
+        Returns:
+            Validated response model instance.
+        """
+        ...
 
     async def acomplete_structured(
         self,
@@ -83,6 +119,27 @@ class LLMClient(Protocol):
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-    ) -> _T: ...
+    ) -> _T:
+        """Asynchronous structured output completion.
 
-    def count_tokens(self, text: str) -> int: ...
+        Args:
+            messages: Conversation messages.
+            response_model: Pydantic model for structured response.
+            temperature: Sampling temperature.
+            max_tokens: Max output tokens.
+
+        Returns:
+            Validated response model instance.
+        """
+        ...
+
+    def count_tokens(self, text: str) -> int:
+        """Count tokens in text.
+
+        Args:
+            text: Text to tokenize.
+
+        Returns:
+            Number of tokens.
+        """
+        ...

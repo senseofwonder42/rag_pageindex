@@ -36,6 +36,13 @@ class PageIndexClient:
         workspace: str | Path | None = None,
         settings: Settings | None = None,
     ) -> None:
+        """Initialize a PageIndexClient for document indexing and retrieval.
+
+        Args:
+            llm: LLM client implementation to use for indexing.
+            workspace: Optional workspace directory for persisting indexed documents.
+            settings: Optional Settings instance; uses default if None.
+        """
         self._llm = llm
         self._settings = settings
         self.workspace = Path(workspace).expanduser() if workspace else None
@@ -46,7 +53,17 @@ class PageIndexClient:
             self._load_workspace()
 
     def index(self, file_path: str | Path) -> str:
-        """Index a PDF document and return its document_id."""
+        """Index a PDF document using the PageIndex pipeline.
+
+        Args:
+            file_path: Path to the PDF file to index.
+
+        Returns:
+            Unique document ID for the indexed document.
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+        """
         path = Path(file_path).expanduser().resolve()
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -82,6 +99,14 @@ class PageIndexClient:
 
     @staticmethod
     def _make_meta_entry(doc: dict[str, Any]) -> dict[str, Any]:
+        """Extract metadata fields from a document dict.
+
+        Args:
+            doc: Full document dict with all indexed content.
+
+        Returns:
+            Metadata-only dict suitable for _meta.json index.
+        """
         return {
             "type": doc.get("type", ""),
             "doc_name": doc.get("doc_name", ""),
@@ -92,6 +117,14 @@ class PageIndexClient:
 
     @staticmethod
     def _read_json(path: Path) -> dict[str, Any] | None:
+        """Read and parse a JSON file from disk.
+
+        Args:
+            path: Path to the JSON file.
+
+        Returns:
+            Parsed JSON dict, or None on read/decode error (logged as warning).
+        """
         try:
             with path.open("r", encoding="utf-8") as f:
                 return json.load(f)
@@ -100,6 +133,14 @@ class PageIndexClient:
             return None
 
     def _save_doc(self, doc_id: str) -> None:
+        """Save indexed document to workspace and update metadata index.
+
+        Persists the document dict (without full page text) and updates
+        the workspace metadata file to include this document.
+
+        Args:
+            doc_id: Document ID to save.
+        """
         doc = dict(self.documents[doc_id])
         doc.pop("pages", None)
         path = self.workspace / f"{doc_id}.json"  # type: ignore[operator]
@@ -110,6 +151,11 @@ class PageIndexClient:
         self.documents[doc_id].pop("pages", None)
 
     def _rebuild_meta(self) -> dict[str, Any]:
+        """Reconstruct metadata index by scanning workspace JSON files.
+
+        Returns:
+            Metadata dict keyed by document ID.
+        """
         meta: dict[str, Any] = {}
         for p in self.workspace.glob("*.json"):  # type: ignore[union-attr]
             if p.name == META_INDEX:
@@ -120,6 +166,11 @@ class PageIndexClient:
         return meta
 
     def _read_meta(self) -> dict[str, Any] | None:
+        """Read the workspace metadata index from _meta.json.
+
+        Returns:
+            Metadata dict or None if file doesn't exist or is invalid.
+        """
         meta = self._read_json(
             self.workspace / META_INDEX  # type: ignore[operator]
         )
@@ -129,6 +180,15 @@ class PageIndexClient:
         return meta
 
     def _save_meta(self, doc_id: str, entry: dict[str, Any]) -> None:
+        """Update workspace metadata index with a document entry.
+
+        Reads current metadata, inserts or updates the entry, and writes
+        the updated index back to _meta.json.
+
+        Args:
+            doc_id: Document ID.
+            entry: Metadata dict for this document.
+        """
         meta = self._read_meta() or self._rebuild_meta()
         meta[doc_id] = entry
         meta_path = self.workspace / META_INDEX  # type: ignore[operator]
@@ -136,6 +196,11 @@ class PageIndexClient:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
     def _load_workspace(self) -> None:
+        """Load all documents from workspace metadata into memory.
+
+        Called during __init__ to populate self.documents with indexed
+        documents from the workspace directory.
+        """
         meta = self._read_meta()
         if meta is None:
             meta = self._rebuild_meta()
@@ -150,6 +215,14 @@ class PageIndexClient:
             self.documents[doc_id] = doc
 
     def _ensure_doc_loaded(self, doc_id: str) -> None:
+        """Load full document data (structure, pages) from disk if needed.
+
+        Metadata-only docs loaded from _meta.json are augmented with full
+        content by reading the per-document JSON file.
+
+        Args:
+            doc_id: Document ID to load.
+        """
         doc = self.documents.get(doc_id)
         if not doc or doc.get("structure") is not None:
             return
@@ -165,17 +238,40 @@ class PageIndexClient:
     # ── Public API ────────────────────────────────────────────────────────
 
     def get_document(self, doc_id: str) -> str:
-        """Return document metadata JSON."""
+        """Get document metadata as JSON.
+
+        Args:
+            doc_id: Document ID.
+
+        Returns:
+            JSON string with document name, description, type, status, page count.
+        """
         return get_document(self.documents, doc_id)
 
     def get_document_structure(self, doc_id: str) -> str:
-        """Return document tree structure JSON (text fields stripped)."""
+        """Get document tree structure as JSON (text content stripped).
+
+        Args:
+            doc_id: Document ID.
+
+        Returns:
+            JSON string with the hierarchical tree structure.
+        """
         if self.workspace:
             self._ensure_doc_loaded(doc_id)
         return get_document_structure(self.documents, doc_id)
 
     def get_page_content(self, doc_id: str, pages: str) -> str:
-        """Return page content for `pages` (e.g. '5-7', '3,8', '12')."""
+        """Get content of specific pages from a document.
+
+        Args:
+            doc_id: Document ID.
+            pages: Page specification: single page ('3'), range ('5-7'),
+                or comma-separated ('3,8,12').
+
+        Returns:
+            JSON string with list of {page, content} dicts.
+        """
         if self.workspace:
             self._ensure_doc_loaded(doc_id)
         return get_page_content(self.documents, doc_id, pages)

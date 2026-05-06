@@ -10,7 +10,20 @@ _Tree = dict[str, Any] | list[Any]
 
 
 def _parse_pages(pages: str) -> list[int]:
-    """Parse '5-7', '3,8', or '12' into a sorted unique list of ints."""
+    """Parse page specification into a sorted list of unique page numbers.
+
+    Supports individual pages ('3'), ranges ('5-7'), and comma-separated
+    combinations ('3,8,12'). Deduplicates and sorts the result.
+
+    Args:
+        pages: Page specification string.
+
+    Returns:
+        Sorted list of unique page numbers (1-indexed).
+
+    Raises:
+        ValueError: If range start > end or format is invalid.
+    """
     result: list[int] = []
     for part in pages.split(","):
         part = part.strip()
@@ -26,6 +39,18 @@ def _parse_pages(pages: str) -> list[int]:
 
 
 def _get_pdf_page_content(doc_info: dict[str, Any], page_nums: list[int]) -> list[dict[str, Any]]:
+    """Extract text content for specific pages from a PDF.
+
+    Uses cached page content if available; otherwise reads the PDF file
+    from disk. Returns only pages that exist in the document.
+
+    Args:
+        doc_info: Document metadata dict with 'path' and optional 'pages'.
+        page_nums: List of page numbers to extract (1-indexed).
+
+    Returns:
+        List of {page, content} dicts for requested pages.
+    """
     cached = doc_info.get("pages")
     if cached:
         page_map = {p["page"]: p["content"] for p in cached}
@@ -42,6 +67,14 @@ def _get_pdf_page_content(doc_info: dict[str, Any], page_nums: list[int]) -> lis
 
 
 def _remove_text_fields(node: _Tree) -> _Tree:
+    """Recursively remove 'text' fields from tree nodes.
+
+    Args:
+        node: Tree dict, list, or scalar value.
+
+    Returns:
+        Tree with all 'text' keys removed at all levels.
+    """
     if isinstance(node, dict):
         return {k: _remove_text_fields(v) for k, v in node.items() if k != "text"}
     if isinstance(node, list):
@@ -50,7 +83,15 @@ def _remove_text_fields(node: _Tree) -> _Tree:
 
 
 def get_document(documents: dict[str, Any], doc_id: str) -> str:
-    """Return JSON with document metadata."""
+    """Get document metadata as JSON.
+
+    Args:
+        documents: Documents dict (from PageIndexClient).
+        doc_id: Document ID.
+
+    Returns:
+        JSON string with doc_id, doc_name, doc_description, type, status, page_count.
+    """
     doc_info = documents.get(doc_id)
     if not doc_info:
         return json.dumps({"error": f"Document {doc_id} not found"})
@@ -67,7 +108,15 @@ def get_document(documents: dict[str, Any], doc_id: str) -> str:
 
 
 def get_document_structure(documents: dict[str, Any], doc_id: str) -> str:
-    """Return tree structure JSON with text fields stripped."""
+    """Get document tree structure as JSON (text content removed).
+
+    Args:
+        documents: Documents dict (from PageIndexClient).
+        doc_id: Document ID.
+
+    Returns:
+        JSON string with hierarchical tree structure (no text fields).
+    """
     doc_info = documents.get(doc_id)
     if not doc_info:
         return json.dumps({"error": f"Document {doc_id} not found"})
@@ -78,7 +127,16 @@ def get_document_structure(documents: dict[str, Any], doc_id: str) -> str:
 
 
 def get_page_content(documents: dict[str, Any], doc_id: str, pages: str) -> str:
-    """Return page content JSON for the given pages string."""
+    """Get content of specific pages as JSON.
+
+    Args:
+        documents: Documents dict (from PageIndexClient).
+        doc_id: Document ID.
+        pages: Page specification ('3', '5-7', '3,8,12', etc.).
+
+    Returns:
+        JSON string with list of {page, content} dicts; {error: message} on failure.
+    """
     doc_info = documents.get(doc_id)
     if not doc_info:
         return json.dumps({"error": f"Document {doc_id} not found"})

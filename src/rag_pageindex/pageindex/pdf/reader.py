@@ -23,6 +23,15 @@ class Page:
 
 
 def _sanitize_filename(filename: str, replacement: str = "-") -> str:
+    """Replace forward slashes in filename with a safe replacement character.
+
+    Args:
+        filename: Original filename.
+        replacement: Character to replace slashes with (default "-").
+
+    Returns:
+        Filename with slashes removed.
+    """
     return filename.replace("/", replacement)
 
 

@@ -26,9 +26,21 @@ if TYPE_CHECKING:
 
 
 def list_to_tree(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert a flat list with `structure` keys into a nested tree."""
+    """Convert a flat list with `structure` keys into a nested tree.
+
+    Uses the 'structure' field (e.g., '1', '1.2', '1.2.3') to determine
+    parent-child relationships and build a hierarchical tree. Removes empty
+    'nodes' lists from leaf nodes.
+
+    Args:
+        data: Flat list of dicts with 'structure', 'title', 'start_index', 'end_index'.
+
+    Returns:
+        Nested tree structure with root nodes as a list.
+    """
 
     def _parent_structure(structure: str | None) -> str | None:
+        """Get parent structure index from a dotted structure string."""
         if not structure:
             return None
         parts = str(structure).split(".")
@@ -53,6 +65,7 @@ def list_to_tree(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
             root_nodes.append(node)
 
     def _clean(node: dict[str, Any]) -> dict[str, Any]:
+        """Recursively remove empty 'nodes' lists from tree nodes."""
         if not node["nodes"]:
             del node["nodes"]
         else:
@@ -66,7 +79,14 @@ def list_to_tree(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def add_preface_if_needed(
     data: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Insert a 'Preface' node if the first real section doesn't start at page 1."""
+    """Insert a 'Preface' node if the first section doesn't start at page 1.
+
+    Args:
+        data: TOC items with 'physical_index' fields.
+
+    Returns:
+        Original data with 'Preface' node inserted if needed.
+    """
     if not data:
         return data
     first_pi = data[0].get("physical_index")
@@ -86,7 +106,18 @@ def post_processing(
     structure: list[dict[str, Any]],
     end_physical_index: int,
 ) -> list[dict[str, Any]]:
-    """Assign start_index/end_index to each flat item then build the tree."""
+    """Assign page indices to TOC items and convert to hierarchical tree.
+
+    Sets start_index and end_index for each item based on physical_index
+    ordering and appear_start flags, then builds a nested tree structure.
+
+    Args:
+        structure: Flat list of TOC items with physical_index.
+        end_physical_index: Last page number in the document.
+
+    Returns:
+        Hierarchical tree structure (or flat list if tree conversion failed).
+    """
     for i, item in enumerate(structure):
         item["start_index"] = item.get("physical_index")
         if i < len(structure) - 1:
@@ -109,10 +140,18 @@ def post_processing(
 
 
 def write_node_id(data: dict[str, Any] | list[Any]) -> None:
-    """Assign zero-padded node_id values in-place (depth-first pre-order)."""
+    """Assign zero-padded node IDs to tree nodes in depth-first pre-order.
+
+    Modifies the tree in-place, adding 'node_id' fields with sequential
+    zero-padded numbers (0000, 0001, etc.) in pre-order traversal.
+
+    Args:
+        data: Tree dict or list to annotate with node IDs.
+    """
     counter = [0]
 
     def _write(node: dict[str, Any] | list[Any]) -> None:
+        """Recursively assign node IDs."""
         if isinstance(node, dict):
             node["node_id"] = str(counter[0]).zfill(4)
             counter[0] += 1
@@ -127,7 +166,15 @@ def write_node_id(data: dict[str, Any] | list[Any]) -> None:
 
 
 def add_node_text(node: dict[str, Any] | list[Any], pages: list[Page]) -> None:
-    """Attach concatenated page text to each node in-place."""
+    """Attach concatenated page text to each tree node in-place.
+
+    Uses start_index and end_index to extract and concatenate the text
+    of all pages covering that node's range.
+
+    Args:
+        node: Tree dict or list to annotate with text.
+        pages: List of Page objects with extracted text.
+    """
     if isinstance(node, dict):
         start = node.get("start_index")
         end = node.get("end_index")
@@ -152,7 +199,26 @@ async def meta_processor(
     settings: Settings,
     source: PdfSource | None = None,
 ) -> list[dict[str, Any]]:
-    """Run the appropriate TOC extraction path and return verified items."""
+    """Run TOC extraction and verification, with fallback to simpler modes.
+
+    Orchestrates text-based TOC extraction, verification, and optional
+    VLM re-extraction. Cascades through modes (with page numbers →
+    without page numbers → no TOC) if verification fails.
+
+    Args:
+        pages: List of PDF pages.
+        mode: Extraction mode ('process_toc_with_page_numbers',
+            'process_toc_no_page_numbers', 'process_no_toc').
+        toc_content: Extracted TOC text if already available.
+        toc_page_list: Page indices containing TOC.
+        start_index: Starting page number for this range (1-indexed).
+        llm: LLM client for extraction and verification.
+        settings: Pipeline configuration.
+        source: PDF source for VLM vision fallback.
+
+    Returns:
+        List of verified TOC items with physical_index fields.
+    """
     logger.info("meta_processor mode={} start_index={}", mode, start_index)
 
     extraction_failed = False
@@ -301,7 +367,22 @@ async def process_large_node_recursively(
     settings: Settings,
     source: PdfSource | None = None,
 ) -> dict[str, Any]:
-    """Recursively split oversized nodes using the no-TOC extraction path."""
+    """Recursively split oversized nodes into sub-trees.
+
+    If a node exceeds max_pages_per_node and max_tokens_per_node, uses
+    the no-TOC extraction path to subdivide it. Recursively processes
+    child nodes and returns the modified node with sub-nodes added.
+
+    Args:
+        node: Tree node to process.
+        pages: All pages in the document.
+        llm: LLM client for extraction.
+        settings: Configuration (page/token limits).
+        source: PDF source for VLM fallback.
+
+    Returns:
+        Modified node with sub-nodes added if splitting occurred.
+    """
     node_pages = pages[node["start_index"] - 1 : node["end_index"]]
     token_num = sum(p.token_length for p in node_pages)
 
@@ -356,7 +437,21 @@ async def tree_parser(
     settings: Settings,
     source: PdfSource | None = None,
 ) -> list[dict[str, Any]]:
-    """Main async entry: detect TOC, build tree, verify, split large nodes."""
+    """Main entry point: detect TOC, build tree, verify, and split large nodes.
+
+    Orchestrates the full tree-building pipeline: checks for a TOC,
+    extracts and verifies it, builds the tree structure, and recursively
+    splits any oversized nodes.
+
+    Args:
+        pages: List of PDF pages.
+        llm: LLM client for extraction and verification.
+        settings: Pipeline configuration.
+        source: PDF source for VLM vision fallback.
+
+    Returns:
+        Hierarchical tree structure (list of root nodes).
+    """
     toc_detection = check_toc(
         pages,
         toc_check_page_num=settings.pageindex_toc_check_page_num,

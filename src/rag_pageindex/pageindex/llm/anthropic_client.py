@@ -14,6 +14,14 @@ _T = TypeVar("_T", bound=BaseModel)
 
 
 def _check_no_multimodal(messages: list[Message]) -> None:
+    """Verify that messages do not contain multimodal content blocks.
+
+    Args:
+        messages: List of messages to check.
+
+    Raises:
+        NotImplementedError: If any message has a list of content parts.
+    """
     for msg in messages:
         if isinstance(msg["content"], list):
             raise NotImplementedError(
@@ -40,13 +48,25 @@ def _split_system(
 
 
 def _map_stop_reason(stop_reason: str | None) -> FinishReason:
+    """Map Anthropic stop reason to protocol FinishReason.
+
+    Args:
+        stop_reason: Stop reason from Anthropic API.
+
+    Returns:
+        Normalized finish reason.
+    """
     if stop_reason == "max_tokens":
         return "max_output_reached"
     return "finished"
 
 
 class AnthropicClient:
-    """Thin Anthropic-SDK-backed `LLMClient` with retry."""
+    """LLMClient implementation backed by Anthropic's SDK with retry logic.
+
+    Supports both sync and async completion. Does not support structured
+    output (use OpenAICompatibleClient instead).
+    """
 
     def __init__(
         self,
@@ -57,6 +77,15 @@ class AnthropicClient:
         retry_delay_s: float = 1.0,
         max_output_tokens: int = 4096,
     ) -> None:
+        """Initialize an AnthropicClient.
+
+        Args:
+            api_key: Anthropic API key.
+            model: Model ID (e.g., 'claude-3-5-sonnet-20241022').
+            max_retries: Maximum retries on transient failures.
+            retry_delay_s: Base delay between retries in seconds.
+            max_output_tokens: Default max tokens for completion.
+        """
         self._sync = Anthropic(api_key=api_key)
         self._async = AsyncAnthropic(api_key=api_key)
         self._model = model
@@ -66,6 +95,7 @@ class AnthropicClient:
 
     @property
     def model(self) -> str:
+        """Get the model ID."""
         return self._model
 
     def complete(
@@ -75,6 +105,16 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        """Synchronous text completion with retry.
+
+        Args:
+            messages: List of messages (system must be None or a single dict).
+            temperature: Sampling temperature (0.0 = deterministic).
+            max_tokens: Max tokens to generate; uses default if None.
+
+        Returns:
+            LLMResponse with content and finish_reason.
+        """
         _check_no_multimodal(messages)
         system, rest = _split_system(messages)
 
@@ -111,6 +151,16 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        """Asynchronous text completion with retry.
+
+        Args:
+            messages: List of messages (system must be None or a single dict).
+            temperature: Sampling temperature (0.0 = deterministic).
+            max_tokens: Max tokens to generate; uses default if None.
+
+        Returns:
+            LLMResponse with content and finish_reason.
+        """
         _check_no_multimodal(messages)
         system, rest = _split_system(messages)
 
@@ -148,6 +198,17 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> _T:
+        """Structured output not supported by AnthropicClient.
+
+        Args:
+            messages: Ignored.
+            response_model: Ignored.
+            temperature: Ignored.
+            max_tokens: Ignored.
+
+        Raises:
+            NotImplementedError: Always; use OpenAICompatibleClient instead.
+        """
         raise NotImplementedError(
             "AnthropicClient does not implement complete_structured. Use OpenAICompatibleClient."
         )
@@ -160,11 +221,30 @@ class AnthropicClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> _T:
+        """Structured output not supported by AnthropicClient.
+
+        Args:
+            messages: Ignored.
+            response_model: Ignored.
+            temperature: Ignored.
+            max_tokens: Ignored.
+
+        Raises:
+            NotImplementedError: Always; use OpenAICompatibleClient instead.
+        """
         raise NotImplementedError(
             "AnthropicClient does not implement acomplete_structured. Use OpenAICompatibleClient."
         )
 
     def count_tokens(self, text: str) -> int:
+        """Count tokens in a message using Anthropic's token counter.
+
+        Args:
+            text: Text to tokenize.
+
+        Returns:
+            Number of tokens.
+        """
         if not text:
             return 0
         result = self._sync.messages.count_tokens(

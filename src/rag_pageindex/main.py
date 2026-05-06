@@ -18,6 +18,14 @@ if TYPE_CHECKING:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the PDF indexing application.
+
+    Args:
+        argv: List of command-line arguments. If None, uses sys.argv[1:].
+
+    Returns:
+        Parsed arguments with `pdf_path` attribute.
+    """
     parser = argparse.ArgumentParser(
         description="Index a PDF with PageIndex and print the tree as JSON."
     )
@@ -51,6 +59,11 @@ def _tracing(settings: Settings) -> Iterator[None]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Index a PDF and print the resulting tree structure as JSON.
+
+    Args:
+        argv: Command-line arguments. If None, uses sys.argv[1:].
+    """
     setup_logging(settings.log_level)
     args = _parse_args(argv)
     with _tracing(settings):

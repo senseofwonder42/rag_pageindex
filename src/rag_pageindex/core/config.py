@@ -14,7 +14,11 @@ _CONFIG_YAML = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
 class Settings(BaseSettings):
-    """Load settings from config.yaml then .env (env vars win)."""
+    """Pydantic settings model for the PageIndex RAG application.
+
+    Loads configuration from multiple sources in priority order:
+    init arguments > environment variables > .env file > config.yaml > defaults.
+    """
 
     environment: Literal["local", "test", "dev", "preprod", "prod"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
@@ -58,7 +62,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Priority: init > env vars > .env file > config.yaml > defaults
     @classmethod
     def settings_customise_sources(
         cls,
@@ -68,6 +71,20 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,  # noqa: ARG003
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Customize settings loading sources and their priority order.
+
+        Priority: init args > env vars > .env file > config.yaml > defaults.
+
+        Args:
+            settings_cls: The Settings class.
+            init_settings: Settings from initialization.
+            env_settings: Settings from environment variables.
+            dotenv_settings: Settings from .env file.
+            file_secret_settings: Unused; kept for compatibility.
+
+        Returns:
+            Tuple of settings sources in priority order.
+        """
         sources: list[PydanticBaseSettingsSource] = [
             init_settings,
             env_settings,
@@ -82,7 +99,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return settings."""
+    """Return a cached singleton instance of Settings.
+
+    Returns:
+        Settings instance loaded from configuration sources.
+    """
     return Settings()
 
 

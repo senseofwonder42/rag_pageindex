@@ -39,7 +39,15 @@ _Tree = dict[str, Any] | list[Any]
 
 
 def _format_structure(structure: _Tree, *, order: list[str]) -> _Tree:
-    """Reorder dict keys in every node; drop empty `nodes` lists."""
+    """Reorder dict keys recursively and remove empty node lists.
+
+    Args:
+        structure: Tree dict or list to format.
+        order: Desired key ordering.
+
+    Returns:
+        Reformatted tree with keys in specified order and no empty 'nodes'.
+    """
     if isinstance(structure, dict):
         if "nodes" in structure:
             structure["nodes"] = _format_structure(structure["nodes"], order=order)
@@ -58,6 +66,19 @@ async def _build(
     llm: LLMClient,
     settings: Settings,
 ) -> dict[str, Any]:
+    """Build the hierarchical page index tree for a PDF document.
+
+    Main async entry point that orchestrates reading pages, parsing the tree,
+    adding node IDs, summaries, and descriptions based on settings.
+
+    Args:
+        source: PDF source (file path, Path object, or BytesIO).
+        llm: LLM client for extraction and verification.
+        settings: Configuration settings for the pipeline.
+
+    Returns:
+        Dict with 'doc_name', 'structure', and optionally 'doc_description'.
+    """
     from rag_pageindex.pageindex.pdf.reader import read_pages
 
     pages = read_pages(source, llm=llm, parser="PyPDF2")
@@ -97,9 +118,19 @@ def page_index(
     llm: LLMClient,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Index a PDF and return a structured tree dict.
+    """Index a PDF and return a structured hierarchical tree.
 
-    Synchronous entry point; runs the async pipeline internally.
+    Synchronous entry point that wraps the async _build() pipeline. Reads
+    pages, detects and verifies table of contents, builds the tree structure,
+    and optionally adds node IDs, summaries, and descriptions.
+
+    Args:
+        source: PDF source (file path, Path object, or BytesIO).
+        llm: LLM client for extraction and verification.
+        settings: Pipeline configuration; uses default Settings if None.
+
+    Returns:
+        Dict with 'doc_name', 'structure', and optionally 'doc_description'.
     """
     if settings is None:
         from rag_pageindex.core.config import settings as _default_settings

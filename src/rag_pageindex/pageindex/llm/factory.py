@@ -5,6 +5,17 @@ from rag_pageindex.pageindex.llm.protocol import LLMClient
 
 
 def _build_base_client(settings: Settings) -> LLMClient:
+    """Build an LLM client based on settings.llm_provider.
+
+    Args:
+        settings: Configuration settings with llm_provider and llm_model.
+
+    Returns:
+        LLMClient instance (AnthropicClient or OpenAICompatibleClient).
+
+    Raises:
+        RuntimeError: If the required API key is not set or provider is unknown.
+    """
     if settings.llm_provider == "anthropic":
         if settings.anthropic_api_key is None:
             raise RuntimeError("ANTHROPIC_API_KEY is not set; cannot build AnthropicClient.")
