@@ -1,4 +1,4 @@
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel
@@ -17,24 +17,61 @@ _DEFAULT_TIMEOUT = 120.0
 _CHARS_PER_TOKEN = 4  # rough estimate used when no tokenizer is available
 
 
+class ProviderError(RuntimeError):
+    """Provider returned HTTP 2xx but an error-shaped body (no `choices`)."""
+
+
+class EmptyCompletionError(RuntimeError):
+    """Provider returned a choice with empty content."""
+
+
 def _map_finish_reason(reason: str | None) -> FinishReason:
     if reason == "length":
         return "max_output_reached"
     return "finished"
 
 
+def _truncate(body: str, limit: int = 2000) -> str:
+    return body if len(body) <= limit else body[:limit] + "...<truncated>"
+
+
 def _raise_for_status(resp: httpx.Response) -> None:
     """raise_for_status that includes the response body in the message."""
     if resp.is_success:
         return
-    body = resp.text
-    if len(body) > 2000:
-        body = body[:2000] + "...<truncated>"
     raise httpx.HTTPStatusError(
-        f"{resp.status_code} {resp.reason_phrase} from {resp.request.url}: {body}",
+        f"{resp.status_code} {resp.reason_phrase} from {resp.request.url}: "
+        f"{_truncate(resp.text)}",
         request=resp.request,
         response=resp,
     )
+
+
+def _parse_choice(resp: httpx.Response) -> dict[str, Any]:
+    """Parse JSON body and return the first choice.
+
+    Raises ProviderError if the body is an error envelope (e.g. OpenRouter
+    returning HTTP 200 with `{"error": {...}}` when an upstream provider
+    rejects the request).
+    """
+    data = resp.json()
+    if "choices" not in data or not data["choices"]:
+        raise ProviderError(
+            f"Provider returned no choices (HTTP {resp.status_code}) "
+            f"from {resp.request.url}: {_truncate(resp.text)}"
+        )
+    return data["choices"][0]
+
+
+def _extract_structured_content(choice: dict[str, Any]) -> str:
+    message = choice.get("message") or {}
+    content = message.get("content") if isinstance(message, dict) else None
+    if not content or not str(content).strip():
+        raise EmptyCompletionError(
+            f"Provider returned empty completion "
+            f"(finish_reason={choice.get('finish_reason')!r})"
+        )
+    return str(content)
 
 
 def _build_payload(
@@ -104,10 +141,11 @@ class OpenAICompatibleClient:
         def _call() -> LLMResponse:
             resp = self._sync.post("/chat/completions", json=payload)
             _raise_for_status(resp)
-            data = resp.json()
-            choice = data["choices"][0]
+            choice = _parse_choice(resp)
+            message = choice.get("message") or {}
+            content = message.get("content") if isinstance(message, dict) else None
             return LLMResponse(
-                content=choice["message"]["content"] or "",
+                content=str(content) if content else "",
                 finish_reason=_map_finish_reason(choice.get("finish_reason")),
             )
 
@@ -127,10 +165,11 @@ class OpenAICompatibleClient:
         async def _call() -> LLMResponse:
             resp = await self._async.post("/chat/completions", json=payload)
             _raise_for_status(resp)
-            data = resp.json()
-            choice = data["choices"][0]
+            choice = _parse_choice(resp)
+            message = choice.get("message") or {}
+            content = message.get("content") if isinstance(message, dict) else None
             return LLMResponse(
-                content=choice["message"]["content"] or "",
+                content=str(content) if content else "",
                 finish_reason=_map_finish_reason(choice.get("finish_reason")),
             )
 
@@ -159,8 +198,8 @@ class OpenAICompatibleClient:
         def _call() -> _T:
             resp = self._sync.post("/chat/completions", json=payload)
             _raise_for_status(resp)
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"] or ""
+            choice = _parse_choice(resp)
+            content = _extract_structured_content(choice)
             return response_model.model_validate_json(content)
 
         return with_retries(_call, max_retries=self._max_retries, delay_s=self._retry_delay_s)
@@ -188,8 +227,8 @@ class OpenAICompatibleClient:
         async def _call() -> _T:
             resp = await self._async.post("/chat/completions", json=payload)
             _raise_for_status(resp)
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"] or ""
+            choice = _parse_choice(resp)
+            content = _extract_structured_content(choice)
             return response_model.model_validate_json(content)
 
         return await awith_retries(_call, max_retries=self._max_retries, delay_s=self._retry_delay_s)

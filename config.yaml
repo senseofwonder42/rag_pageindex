@@ -13,7 +13,7 @@ llm_base_url: https://openrouter.ai/api/v1
 llm_max_retries: 0
 llm_retry_delay_s: 1.0
 llm_temperature: 0.0
-llm_max_output_tokens: 1024
+llm_max_output_tokens: 4096
 llm_timeout: 120.0
 
 # PageIndex pipeline tuning
