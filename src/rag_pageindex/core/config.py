@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     pageindex_vision_mode: Literal["off", "fallback"] = "off"
     pageindex_vision_dpi: int = 144
     pageindex_vision_fallback_threshold: float = 0.6
+    # Some providers cap images-per-prompt (e.g. OpenRouter→Nvidia: 10).
+    pageindex_vision_max_images_per_call: int = 1
 
     # Langfuse tracing (off by default)
     tracing_enabled: bool = False

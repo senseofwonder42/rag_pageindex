@@ -21,25 +21,37 @@ async def _vlm_locate_title(
     rendered: dict[int, bytes],
     *,
     llm: LLMClient,
+    max_images_per_call: int = 10,
 ) -> int | None:
-    """Send page images to VLM and return the physical_index where title appears."""
+    """Send page images to VLM and return the physical_index where title appears.
+
+    Splits ``page_indices`` into chunks of at most ``max_images_per_call`` and
+    returns the first non-None match.
+    """
     if not page_indices:
         return None
 
-    start_page = page_indices[0]
-    prompt_text = render(
-        "single_toc_item_index_fixer_vlm.j2",
-        section_title=title,
-        start_page=start_page,
-        num_images=len(page_indices),
-    )
-    parts: list[ContentPart] = [{"type": "text", "text": prompt_text}]
-    for idx in page_indices:
-        if idx in rendered:
-            parts.append(image_part(rendered[idx]))
+    chunk_size = max(1, max_images_per_call)
+    for chunk_start in range(0, len(page_indices), chunk_size):
+        chunk = page_indices[chunk_start : chunk_start + chunk_size]
+        prompt_text = render(
+            "single_toc_item_index_fixer_vlm.j2",
+            section_title=title,
+            start_page=chunk[0],
+            num_images=len(chunk),
+        )
+        parts: list[ContentPart] = [{"type": "text", "text": prompt_text}]
+        for idx in chunk:
+            if idx in rendered:
+                parts.append(image_part(rendered[idx]))
 
-    result = await llm.acomplete_structured([{"role": "user", "content": parts}], PhysicalIndexResponse)
-    return convert_physical_index_to_int(result.physical_index)
+        result = await llm.acomplete_structured(
+            [{"role": "user", "content": parts}], PhysicalIndexResponse
+        )
+        physical_index = convert_physical_index_to_int(result.physical_index)
+        if physical_index is not None:
+            return physical_index
+    return None
 
 
 @observe(name="fix_incorrect_toc_with_vlm")
@@ -51,6 +63,7 @@ async def fix_incorrect_toc_with_vlm(
     *,
     start_index: int = 1,
     dpi: int = 144,
+    max_images_per_call: int = 10,
     llm: LLMClient,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """VLM-based second-stage fixer for items that the text fixer couldn't place.
@@ -93,7 +106,11 @@ async def fix_incorrect_toc_with_vlm(
         page_indices = ranges.get(list_index, [])
 
         physical_index = await _vlm_locate_title(
-            incorrect_item["title"], page_indices, rendered, llm=llm
+            incorrect_item["title"],
+            page_indices,
+            rendered,
+            llm=llm,
+            max_images_per_call=max_images_per_call,
         )
 
         check_item = incorrect_item.copy()

@@ -23,6 +23,20 @@ def _map_finish_reason(reason: str | None) -> FinishReason:
     return "finished"
 
 
+def _raise_for_status(resp: httpx.Response) -> None:
+    """raise_for_status that includes the response body in the message."""
+    if resp.is_success:
+        return
+    body = resp.text
+    if len(body) > 2000:
+        body = body[:2000] + "...<truncated>"
+    raise httpx.HTTPStatusError(
+        f"{resp.status_code} {resp.reason_phrase} from {resp.request.url}: {body}",
+        request=resp.request,
+        response=resp,
+    )
+
+
 def _build_payload(
     model: str,
     messages: list[Message],
@@ -89,7 +103,7 @@ class OpenAICompatibleClient:
 
         def _call() -> LLMResponse:
             resp = self._sync.post("/chat/completions", json=payload)
-            resp.raise_for_status()
+            _raise_for_status(resp)
             data = resp.json()
             choice = data["choices"][0]
             return LLMResponse(
@@ -112,7 +126,7 @@ class OpenAICompatibleClient:
 
         async def _call() -> LLMResponse:
             resp = await self._async.post("/chat/completions", json=payload)
-            resp.raise_for_status()
+            _raise_for_status(resp)
             data = resp.json()
             choice = data["choices"][0]
             return LLMResponse(
@@ -144,7 +158,7 @@ class OpenAICompatibleClient:
 
         def _call() -> _T:
             resp = self._sync.post("/chat/completions", json=payload)
-            resp.raise_for_status()
+            _raise_for_status(resp)
             data = resp.json()
             content = data["choices"][0]["message"]["content"] or ""
             return response_model.model_validate_json(content)
@@ -173,7 +187,7 @@ class OpenAICompatibleClient:
 
         async def _call() -> _T:
             resp = await self._async.post("/chat/completions", json=payload)
-            resp.raise_for_status()
+            _raise_for_status(resp)
             data = resp.json()
             content = data["choices"][0]["message"]["content"] or ""
             return response_model.model_validate_json(content)

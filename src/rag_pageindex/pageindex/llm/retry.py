@@ -16,10 +16,13 @@ def with_retries(
 ) -> T:
     """Call `fn`; on exception, retry up to `max_retries` times.
 
-    Re-raises the final exception so callers can decide what to do.
+    `max_retries` is the total attempt count; values < 1 are clamped to 1
+    (one attempt, no retries). Re-raises the final exception so callers
+    can decide what to do.
     """
+    attempts = max(1, max_retries)
     last_exc: BaseException | None = None
-    for attempt in range(max_retries):
+    for attempt in range(attempts):
         try:
             return fn()
         except Exception as exc:
@@ -27,10 +30,10 @@ def with_retries(
             logger.warning(
                 "LLM call failed (attempt {}/{}): {}",
                 attempt + 1,
-                max_retries,
+                attempts,
                 exc,
             )
-            if attempt < max_retries - 1:
+            if attempt < attempts - 1:
                 time.sleep(delay_s)
     assert last_exc is not None
     raise last_exc
@@ -43,8 +46,9 @@ async def awith_retries(
     delay_s: float,
 ) -> T:
     """Async variant of `with_retries`."""
+    attempts = max(1, max_retries)
     last_exc: BaseException | None = None
-    for attempt in range(max_retries):
+    for attempt in range(attempts):
         try:
             return await fn()
         except Exception as exc:
@@ -52,10 +56,10 @@ async def awith_retries(
             logger.warning(
                 "Async LLM call failed (attempt {}/{}): {}",
                 attempt + 1,
-                max_retries,
+                attempts,
                 exc,
             )
-            if attempt < max_retries - 1:
+            if attempt < attempts - 1:
                 await asyncio.sleep(delay_s)
     assert last_exc is not None
     raise last_exc

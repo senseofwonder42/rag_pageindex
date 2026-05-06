@@ -155,43 +155,59 @@ async def meta_processor(
     """Run the appropriate TOC extraction path and return verified items."""
     logger.info("meta_processor mode={} start_index={}", mode, start_index)
 
-    if mode == "process_toc_with_page_numbers":
-        toc = process_toc_with_page_numbers(
-            toc_content,  # type: ignore[arg-type]
-            toc_page_list,  # type: ignore[arg-type]
-            pages,
-            toc_check_page_num=settings.pageindex_toc_check_page_num,
-            llm=llm,
-            start_index=start_index,
-            toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
+    extraction_failed = False
+    try:
+        if mode == "process_toc_with_page_numbers":
+            toc = process_toc_with_page_numbers(
+                toc_content,  # type: ignore[arg-type]
+                toc_page_list,  # type: ignore[arg-type]
+                pages,
+                toc_check_page_num=settings.pageindex_toc_check_page_num,
+                llm=llm,
+                start_index=start_index,
+                toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
+            )
+        elif mode == "process_toc_no_page_numbers":
+            toc = process_toc_no_page_numbers(
+                toc_content,  # type: ignore[arg-type]
+                pages,
+                start_index=start_index,
+                llm=llm,
+                max_tokens=settings.pageindex_max_tokens_per_node,
+                toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
+            )
+        else:
+            toc = process_no_toc(
+                pages,
+                start_index=start_index,
+                llm=llm,
+                max_tokens=settings.pageindex_max_tokens_per_node,
+            )
+    except Exception as exc:
+        logger.warning(
+            "meta_processor: text extraction failed mode={} ({}); "
+            "falling through to next stage",
+            mode,
+            exc,
         )
-    elif mode == "process_toc_no_page_numbers":
-        toc = process_toc_no_page_numbers(
-            toc_content,  # type: ignore[arg-type]
-            pages,
-            start_index=start_index,
-            llm=llm,
-            max_tokens=settings.pageindex_max_tokens_per_node,
-            toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
-        )
-    else:
-        toc = process_no_toc(
-            pages,
-            start_index=start_index,
-            llm=llm,
-            max_tokens=settings.pageindex_max_tokens_per_node,
-        )
+        toc = []
+        extraction_failed = True
 
     toc = [item for item in toc if item.get("physical_index") is not None]
     toc = validate_and_truncate_physical_indices(toc, len(pages), start_index=start_index)
 
-    accuracy, incorrect = await verify_toc(pages, toc, start_index=start_index, llm=llm)
-    logger.info(
-        "meta_processor verify mode={} accuracy={:.2%} incorrect={}",
-        mode,
-        accuracy,
-        len(incorrect),
-    )
+    if extraction_failed:
+        accuracy, incorrect = 0.0, []
+    else:
+        accuracy, incorrect = await verify_toc(
+            pages, toc, start_index=start_index, llm=llm
+        )
+        logger.info(
+            "meta_processor verify mode={} accuracy={:.2%} incorrect={}",
+            mode,
+            accuracy,
+            len(incorrect),
+        )
 
     if accuracy == 1.0 and not incorrect:
         return toc
@@ -215,6 +231,7 @@ async def meta_processor(
                 source,
                 start_index=start_index,
                 dpi=settings.pageindex_vision_dpi,
+                max_images_per_call=settings.pageindex_vision_max_images_per_call,
                 llm=llm,
             )
         return toc
@@ -256,6 +273,8 @@ async def meta_processor(
             start_page=start_index,
             end_page=end_page,
             dpi=settings.pageindex_vision_dpi,
+            max_images_per_call=settings.pageindex_vision_max_images_per_call,
+            max_output_tokens=settings.pageindex_toc_max_output_tokens,
             llm=llm,
         )
         if vlm_toc:
