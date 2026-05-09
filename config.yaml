@@ -4,8 +4,7 @@
 
 log_level: INFO
 
-# LLM backend
-llm_provider: openai_compatible
+# LLM backend (OpenAI-compatible: OpenRouter, vLLM, etc.)
 llm_model: RedHatAI/gemma-4-26B-A4B-it-NVFP4
 llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
 # llm_model: nvidia/nemotron-nano-12b-v2-vl:free

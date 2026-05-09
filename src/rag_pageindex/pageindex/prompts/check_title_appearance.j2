@@ -1,4 +1,4 @@
-Your job is to check if the given section appears or starts in the given page_text.
+You will be given the current section title and the current page_text. Answer two yes/no questions about it.
 
 Note: do fuzzy matching, ignore any space inconsistency in the page_text.
 
@@ -7,6 +7,11 @@ The given page_text is {{ page_text }}.
 
 Reply format:
 {
-    "answer": "yes or no" (yes if the section appears or starts in the page_text, no otherwise)
+    "answer": "yes or no",
+    "at_start": "yes or no"
 }
+
+- "answer": yes if the section title appears or starts anywhere in page_text, no otherwise.
+- "at_start": yes if the section title is the very first content on the page (no other meaningful content appears before it). If there are other contents before the section title, "at_start" is no. If "answer" is no, "at_start" must be no.
+
 Directly return the final JSON structure. Do not output anything else.

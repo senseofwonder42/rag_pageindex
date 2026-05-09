@@ -23,11 +23,8 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "dev", "preprod", "prod"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    # LLM client
-    llm_provider: Literal["anthropic", "openai_compatible"] = "openai_compatible"
+    # LLM client (OpenAI-compatible backend: OpenRouter, vLLM, etc.)
     llm_model: str = "google/gemini-2.5-flash-preview"
-    anthropic_api_key: SecretStr | None = None
-    # OpenAI-compatible backend (OpenRouter, vLLM, etc.)
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: SecretStr | None = None
     llm_max_retries: int = 10

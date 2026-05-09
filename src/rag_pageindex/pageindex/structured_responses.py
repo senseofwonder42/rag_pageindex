@@ -19,16 +19,18 @@ class CompletionCheckResponse(BaseModel):
 
 class TitleAppearanceResponse(BaseModel):
     answer: Literal["yes", "no"]
-
-
-class TitleStartResponse(BaseModel):
-    start_begin: Literal["yes", "no"]
+    at_start: Literal["yes", "no"] = "no"
 
 
 class PhysicalIndexResponse(BaseModel):
     physical_index: str | None = Field(
         default=None,
         description='Physical page index in "<physical_index_X>" format, or null',
+    )
+    confidence: Literal["high", "low"] = Field(
+        default="low",
+        description='"high" only if the section heading appears verbatim or '
+        'nearly verbatim at the top of exactly one page; otherwise "low".',
     )
 
 

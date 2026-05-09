@@ -61,3 +61,20 @@ def add_page_number_to_toc(
     )
     result = llm.complete_structured([{"role": "user", "content": prompt}], TocPageNumberResponse)
     return [e.model_dump(exclude={"start"}) for e in result.items]
+
+
+async def add_page_number_to_toc_async(
+    part: str,
+    structure: list[dict[str, Any]],
+    *,
+    llm: LLMClient,
+) -> list[dict[str, Any]]:
+    """Async variant of add_page_number_to_toc."""
+    structure_str = _json.dumps(structure, indent=2)
+    prompt = render(
+        "add_page_number_to_toc.j2",
+        part=part,
+        structure=structure_str,
+    )
+    result = await llm.acomplete_structured([{"role": "user", "content": prompt}], TocPageNumberResponse)
+    return [e.model_dump(exclude={"start"}) for e in result.items]

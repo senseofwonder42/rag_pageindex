@@ -1,0 +1,12 @@
+You are given the title of a section and the summaries of its sub-sections. Produce a single concise paragraph that describes what this section covers.
+
+Preserve concrete details from the child summaries. Do NOT over-abstract — the goal is a faithful overview, not a high-level rephrasing. If the child summaries name specific topics, methods, results, or terms, your output should reflect them.
+
+Section title: {{ node_title }}
+
+Sub-section summaries:
+{% for child in child_summaries -%}
+- {{ child.title }}: {{ child.summary }}
+{% endfor %}
+
+Directly return the description, do not include any other text.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json as _json
 import math
@@ -18,6 +19,7 @@ from rag_pageindex.pageindex.toc.helpers import (
 )
 from rag_pageindex.pageindex.toc.parsing import (
     add_page_number_to_toc,
+    add_page_number_to_toc_async,
     toc_index_extractor,
     toc_transformer,
 )
@@ -175,6 +177,15 @@ def calculate_page_offset(pairs: list[dict[str, Any]]) -> int | None:
     return max(counts, key=lambda k: counts[k])
 
 
+def _evenly_spaced_sample(items: list[dict[str, Any]], *, n: int) -> list[dict[str, Any]]:
+    """Pick up to `n` evenly-spaced items by index. Returns all items if len(items) <= n."""
+    if len(items) <= n:
+        return list(items)
+    step = (len(items) - 1) / (n - 1)
+    indices = sorted({int(round(i * step)) for i in range(n)})
+    return [items[i] for i in indices]
+
+
 def _add_page_offset_to_toc_json(data: list[dict[str, Any]], offset: int) -> list[dict[str, Any]]:
     for item in data:
         if item.get("page") is not None and isinstance(item["page"], int):
@@ -183,18 +194,25 @@ def _add_page_offset_to_toc_json(data: list[dict[str, Any]], offset: int) -> lis
     return data
 
 
-def process_none_page_numbers(
+async def process_none_page_numbers(
     toc_items: list[dict[str, Any]],
     pages: list[Page],
     *,
     start_index: int = 1,
     llm: LLMClient,
 ) -> list[dict[str, Any]]:
-    """For TOC items missing a physical_index, ask the LLM to find it."""
-    for i, item in enumerate(toc_items):
-        if "physical_index" in item:
-            continue
+    """For TOC items missing a physical_index, ask the LLM to find each in parallel.
 
+    Each item is searched within a window bounded by its already-known
+    neighbours (using values present at call time only — we don't propagate
+    freshly-resolved indices mid-pass). This loses the sequential refinement
+    of the previous implementation but unlocks O(N) → O(1) wall-clock.
+    """
+    pending_indices = [i for i, item in enumerate(toc_items) if "physical_index" not in item]
+    if not pending_indices:
+        return toc_items
+
+    async def _resolve_one(i: int) -> tuple[int, int | None]:
         prev_idx = 0
         for j in range(i - 1, -1, -1):
             if toc_items[j].get("physical_index") is not None:
@@ -215,20 +233,31 @@ def process_none_page_numbers(
                     f"<physical_index_{page_idx}>\n{pages[list_i].text}\n<physical_index_{page_idx}>\n\n"
                 )
 
-        item_copy = copy.deepcopy(item)
+        item_copy = copy.deepcopy(toc_items[i])
         item_copy.pop("page", None)
-        result = add_page_number_to_toc("".join(page_contents), [item_copy], llm=llm)
+        result = await add_page_number_to_toc_async("".join(page_contents), [item_copy], llm=llm)
         if result:
             raw_pi = result[0].get("physical_index")
             if isinstance(raw_pi, str) and raw_pi.startswith("<physical_index"):
-                item["physical_index"] = int(raw_pi.split("_")[-1].rstrip(">").strip())
-                item.pop("page", None)
+                return i, int(raw_pi.split("_")[-1].rstrip(">").strip())
+        return i, None
+
+    tasks = [_resolve_one(i) for i in pending_indices]
+    resolutions = await asyncio.gather(*tasks, return_exceptions=True)
+    for res in resolutions:
+        if isinstance(res, BaseException):
+            logger.error("process_none_page_numbers error: {}", res)
+            continue
+        i, physical_index = res
+        if physical_index is not None:
+            toc_items[i]["physical_index"] = physical_index
+            toc_items[i].pop("page", None)
 
     return toc_items
 
 
 @observe(name="process_toc_with_page_numbers")
-def process_toc_with_page_numbers(
+async def process_toc_with_page_numbers(
     toc_content: str,
     toc_page_list: list[int],
     pages: list[Page],
@@ -237,9 +266,13 @@ def process_toc_with_page_numbers(
     llm: LLMClient,
     start_index: int = 1,
     toc_max_output_tokens: int | None = None,
+    toc_transformed: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build TOC with physical indices when the TOC already has page numbers."""
-    toc_with_page_number = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
+    if toc_transformed is None:
+        toc_with_page_number = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
+    else:
+        toc_with_page_number = copy.deepcopy(toc_transformed)
     logger.info("toc_transformer: {}", toc_with_page_number)
 
     toc_no_page_number = remove_page_number(copy.deepcopy(toc_with_page_number))
@@ -255,7 +288,11 @@ def process_toc_with_page_numbers(
         )
     main_content = "".join(main_content_parts)
 
-    toc_with_pi = toc_index_extractor(toc_no_page_number, main_content, llm=llm)
+    toc_no_page_number_list: list[dict[str, Any]] = toc_no_page_number  # type: ignore[assignment]
+    sample = _evenly_spaced_sample(toc_no_page_number_list, n=8)
+    logger.info("offset sampling {}/{} entries", len(sample), len(toc_no_page_number_list))
+
+    toc_with_pi = toc_index_extractor(sample, main_content, llm=llm)
     logger.info("toc_with_physical_index: {}", toc_with_pi)
 
     toc_with_pi = convert_physical_index_to_int(toc_with_pi)
@@ -263,13 +300,13 @@ def process_toc_with_page_numbers(
     matching_pairs = extract_matching_page_pairs(toc_with_page_number, toc_with_pi, start_page_index)
     logger.info("matching_pairs: {}", matching_pairs)
 
-    offset = calculate_page_offset(matching_pairs)
+    offset = calculate_page_offset(matching_pairs) if len(matching_pairs) >= 3 else None
     logger.info("offset: {}", offset)
 
     if offset is not None:
         toc_with_page_number = _add_page_offset_to_toc_json(toc_with_page_number, offset)
 
-    toc_with_page_number = process_none_page_numbers(
+    toc_with_page_number = await process_none_page_numbers(
         toc_with_page_number, pages, start_index=start_index, llm=llm
     )
     logger.info("process_none_page_numbers done")
@@ -286,9 +323,13 @@ def process_toc_no_page_numbers(
     llm: LLMClient,
     max_tokens: int = 20_000,
     toc_max_output_tokens: int | None = None,
+    toc_transformed: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build TOC with physical indices when the TOC has no page numbers."""
-    toc_content_list = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
+    if toc_transformed is None:
+        toc_content_list = toc_transformer(toc_content, llm=llm, max_tokens=toc_max_output_tokens)
+    else:
+        toc_content_list = copy.deepcopy(toc_transformed)
     logger.info("toc_transformer: {}", toc_content_list)
 
     groups = page_list_to_group_text(pages, max_tokens=max_tokens, start_index=start_index)

@@ -40,8 +40,7 @@ def _raise_for_status(resp: httpx.Response) -> None:
     if resp.is_success:
         return
     raise httpx.HTTPStatusError(
-        f"{resp.status_code} {resp.reason_phrase} from {resp.request.url}: "
-        f"{_truncate(resp.text)}",
+        f"{resp.status_code} {resp.reason_phrase} from {resp.request.url}: {_truncate(resp.text)}",
         request=resp.request,
         response=resp,
     )
@@ -68,8 +67,7 @@ def _extract_structured_content(choice: dict[str, Any]) -> str:
     content = message.get("content") if isinstance(message, dict) else None
     if not content or not str(content).strip():
         raise EmptyCompletionError(
-            f"Provider returned empty completion "
-            f"(finish_reason={choice.get('finish_reason')!r})"
+            f"Provider returned empty completion (finish_reason={choice.get('finish_reason')!r})"
         )
     return str(content)
 

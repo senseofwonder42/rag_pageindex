@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Any
+from typing import Any, Literal
 
 from loguru import logger
 
@@ -13,7 +13,6 @@ from rag_pageindex.pageindex.prompts import render
 from rag_pageindex.pageindex.structured_responses import (
     PhysicalIndexResponse,
     TitleAppearanceResponse,
-    TitleStartResponse,
 )
 from rag_pageindex.pageindex.toc.helpers import convert_physical_index_to_int
 
@@ -49,12 +48,17 @@ async def check_title_appearance(
     start_index: int = 1,
     llm: LLMClient,
 ) -> dict[str, Any]:
-    """Check whether a TOC item's title appears at its physical_index page."""
+    """Check whether a TOC item's title appears at its physical_index page.
+
+    Returns both whether the title appears anywhere on the page (`answer`)
+    and whether it is the first content on the page (`appear_start`).
+    """
     title = item["title"]
     if item.get("physical_index") is None:
         return {
             "list_index": item.get("list_index"),
             "answer": "no",
+            "appear_start": "no",
             "title": title,
             "page_number": None,
         }
@@ -67,21 +71,10 @@ async def check_title_appearance(
     return {
         "list_index": item.get("list_index"),
         "answer": result.answer,
+        "appear_start": result.at_start,
         "title": title,
         "page_number": page_number,
     }
-
-
-async def check_title_appearance_in_start(
-    title: str,
-    page_text: str,
-    *,
-    llm: LLMClient,
-) -> str:
-    """Check if `title` is the first content on `page_text`. Returns 'yes'/'no'."""
-    prompt = render("check_title_appearance_in_start.j2", title=title, page_text=page_text)
-    result = await llm.acomplete_structured([{"role": "user", "content": prompt}], TitleStartResponse)
-    return result.start_begin
 
 
 @observe(name="check_title_appearance_in_start_concurrent")
@@ -89,25 +82,31 @@ async def check_title_appearance_in_start_concurrent(
     structure: list[dict[str, Any]],
     pages: list[Page],
     *,
+    start_index: int = 1,
     llm: LLMClient,
 ) -> list[dict[str, Any]]:
-    """Set `appear_start` on every structure item concurrently."""
+    """Fill `appear_start` on items that don't already have it.
+
+    `verify_toc` caches `appear_start` onto items it sampled (since the
+    merged check_title_appearance prompt yields it for free). This pass
+    only queries items still missing the field.
+    """
     for item in structure:
         if item.get("physical_index") is None:
             item["appear_start"] = "no"
 
-    valid_items = [item for item in structure if item.get("physical_index") is not None]
-    tasks = [
-        check_title_appearance_in_start(
-            item["title"],
-            pages[item["physical_index"] - 1].text,
-            llm=llm,
-        )
-        for item in valid_items
+    pending = [
+        item
+        for item in structure
+        if item.get("physical_index") is not None and item.get("appear_start") is None
     ]
+    if not pending:
+        return structure
+
+    tasks = [check_title_appearance(item, pages, start_index=start_index, llm=llm) for item in pending]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    for item, result in zip(valid_items, results, strict=False):
-        if isinstance(result, Exception):
+    for item, result in zip(pending, results, strict=False):
+        if isinstance(result, BaseException):
             logger.error(
                 "check_title_appearance_in_start error for {}: {}",
                 item["title"],
@@ -115,7 +114,7 @@ async def check_title_appearance_in_start_concurrent(
             )
             item["appear_start"] = "no"
         else:
-            item["appear_start"] = result
+            item["appear_start"] = result["appear_start"]
 
     return structure
 
@@ -158,6 +157,16 @@ async def verify_toc(
     ]
     results: list[dict[str, Any]] = list(await asyncio.gather(*tasks))
 
+    # Only cache appear_start for items the verify accepted; "incorrect"
+    # items may have their physical_index rewritten by fix_incorrect_toc,
+    # so their cached appear_start would be stale.
+    for r in results:
+        if r["answer"] != "yes":
+            continue
+        li = r["list_index"]
+        if li is not None and 0 <= li < len(list_result):
+            list_result[li]["appear_start"] = r["appear_start"]
+
     correct_count = sum(1 for r in results if r["answer"] == "yes")
     incorrect = [r for r in results if r["answer"] != "yes"]
     accuracy = correct_count / len(results) if results else 0.0
@@ -170,15 +179,19 @@ async def single_toc_item_index_fixer(
     content: str,
     *,
     llm: LLMClient,
-) -> int | None:
-    """Ask the LLM to locate `section_title` within `content`."""
+) -> tuple[int | None, Literal["high", "low"]]:
+    """Ask the LLM to locate `section_title` within `content`.
+
+    Returns (physical_index, confidence). High confidence means the model
+    saw an unambiguous match; callers may skip the post-hoc verify step.
+    """
     prompt = render(
         "single_toc_item_index_fixer.j2",
         section_title=section_title,
         content=content,
     )
     result = await llm.acomplete_structured([{"role": "user", "content": prompt}], PhysicalIndexResponse)
-    return convert_physical_index_to_int(result.physical_index)
+    return convert_physical_index_to_int(result.physical_index), result.confidence
 
 
 async def fix_incorrect_toc(
@@ -228,9 +241,17 @@ async def fix_incorrect_toc(
                 )
         content_range = "".join(page_contents)
 
-        physical_index = await single_toc_item_index_fixer(
+        physical_index, confidence = await single_toc_item_index_fixer(
             incorrect_item["title"], content_range, llm=llm
         )
+        in_range = physical_index is not None and start_index <= physical_index <= end_index
+        if confidence == "high" and in_range:
+            return {
+                "list_index": list_index,
+                "title": incorrect_item["title"],
+                "physical_index": physical_index,
+                "is_valid": True,
+            }
         check_item = incorrect_item.copy()
         check_item["physical_index"] = physical_index
         check_result = await check_title_appearance(check_item, pages, start_index=start_index, llm=llm)
@@ -274,7 +295,7 @@ async def fix_incorrect_toc_with_retries(
     incorrect_results: list[dict[str, Any]],
     *,
     start_index: int = 1,
-    max_attempts: int = 3,
+    max_attempts: int = 2,
     llm: LLMClient,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Retry fix_incorrect_toc up to `max_attempts` times."""

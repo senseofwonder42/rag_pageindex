@@ -14,6 +14,7 @@ from rag_pageindex.pageindex.toc.page_mapping import (
     process_toc_no_page_numbers,
     process_toc_with_page_numbers,
 )
+from rag_pageindex.pageindex.toc.parsing import toc_transformer
 from rag_pageindex.pageindex.toc.verification import (
     check_title_appearance_in_start_concurrent,
     fix_incorrect_toc_with_retries,
@@ -166,22 +167,20 @@ def write_node_id(data: dict[str, Any] | list[Any]) -> None:
 
 
 def add_node_text(node: dict[str, Any] | list[Any], pages: list[Page]) -> None:
-    """Attach concatenated page text to each tree node in-place.
+    """Attach concatenated page text to LEAF tree nodes only.
 
-    Uses start_index and end_index to extract and concatenate the text
-    of all pages covering that node's range.
-
-    Args:
-        node: Tree dict or list to annotate with text.
-        pages: List of Page objects with extracted text.
+    Internal nodes never get a `text` field; their summaries are derived
+    from child summaries (see generate_summaries_for_structure). This
+    keeps memory peak proportional to the leaf set rather than O(D × text).
     """
     if isinstance(node, dict):
+        if node.get("nodes"):
+            add_node_text(node["nodes"], pages)
+            return
         start = node.get("start_index")
         end = node.get("end_index")
         if start is not None and end is not None:
             node["text"] = "".join(pages[i].text for i in range(start - 1, end))
-        if "nodes" in node:
-            add_node_text(node["nodes"], pages)
     elif isinstance(node, list):
         for item in node:
             add_node_text(item, pages)
@@ -198,6 +197,7 @@ async def meta_processor(
     llm: LLMClient,
     settings: Settings,
     source: PdfSource | None = None,
+    toc_transformed: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Run TOC extraction and verification, with fallback to simpler modes.
 
@@ -221,10 +221,28 @@ async def meta_processor(
     """
     logger.info("meta_processor mode={} start_index={}", mode, start_index)
 
+    # Memoise toc_transformer across cascade fall-through: both
+    # process_toc_with_page_numbers and process_toc_no_page_numbers
+    # transform the same toc_content; compute once on first entry.
+    if (
+        toc_transformed is None
+        and toc_content is not None
+        and toc_content.strip()
+        and mode in ("process_toc_with_page_numbers", "process_toc_no_page_numbers")
+    ):
+        try:
+            toc_transformed = toc_transformer(
+                toc_content,
+                llm=llm,
+                max_tokens=settings.pageindex_toc_max_output_tokens,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("toc_transformer failed: {}; cascade will retry", exc)
+
     extraction_failed = False
     try:
         if mode == "process_toc_with_page_numbers":
-            toc = process_toc_with_page_numbers(
+            toc = await process_toc_with_page_numbers(
                 toc_content,  # type: ignore[arg-type]
                 toc_page_list,  # type: ignore[arg-type]
                 pages,
@@ -232,6 +250,7 @@ async def meta_processor(
                 llm=llm,
                 start_index=start_index,
                 toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
+                toc_transformed=toc_transformed,
             )
         elif mode == "process_toc_no_page_numbers":
             toc = process_toc_no_page_numbers(
@@ -241,6 +260,7 @@ async def meta_processor(
                 llm=llm,
                 max_tokens=settings.pageindex_max_tokens_per_node,
                 toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
+                toc_transformed=toc_transformed,
             )
         else:
             toc = process_no_toc(
@@ -251,8 +271,7 @@ async def meta_processor(
             )
     except Exception as exc:
         logger.warning(
-            "meta_processor: text extraction failed mode={} ({}); "
-            "falling through to next stage",
+            "meta_processor: text extraction failed mode={} ({}); falling through to next stage",
             mode,
             exc,
         )
@@ -265,9 +284,7 @@ async def meta_processor(
     if extraction_failed:
         accuracy, incorrect = 0.0, []
     else:
-        accuracy, incorrect = await verify_toc(
-            pages, toc, start_index=start_index, llm=llm
-        )
+        accuracy, incorrect = await verify_toc(pages, toc, start_index=start_index, llm=llm)
         logger.info(
             "meta_processor verify mode={} accuracy={:.2%} incorrect={}",
             mode,
@@ -284,7 +301,6 @@ async def meta_processor(
             pages,
             incorrect,
             start_index=start_index,
-            max_attempts=3,
             llm=llm,
         )
         if still_incorrect and source is not None and settings.pageindex_vision_mode == "fallback":
@@ -312,6 +328,7 @@ async def meta_processor(
             llm=llm,
             settings=settings,
             source=source,
+            toc_transformed=toc_transformed,
         )
     if mode == "process_toc_no_page_numbers":
         return await meta_processor(
@@ -452,7 +469,7 @@ async def tree_parser(
     Returns:
         Hierarchical tree structure (list of root nodes).
     """
-    toc_detection = check_toc(
+    toc_detection = await check_toc(
         pages,
         toc_check_page_num=settings.pageindex_toc_check_page_num,
         llm=llm,

@@ -22,14 +22,10 @@ async def _vlm_locate_title(
     *,
     llm: LLMClient,
     max_images_per_call: int = 10,
-) -> int | None:
-    """Send page images to VLM and return the physical_index where title appears.
-
-    Splits ``page_indices`` into chunks of at most ``max_images_per_call`` and
-    returns the first non-None match.
-    """
+) -> tuple[int | None, str]:
+    """Send page images to VLM; return (physical_index, confidence)."""
     if not page_indices:
-        return None
+        return None, "low"
 
     chunk_size = max(1, max_images_per_call)
     for chunk_start in range(0, len(page_indices), chunk_size):
@@ -50,8 +46,8 @@ async def _vlm_locate_title(
         )
         physical_index = convert_physical_index_to_int(result.physical_index)
         if physical_index is not None:
-            return physical_index
-    return None
+            return physical_index, result.confidence
+    return None, "low"
 
 
 @observe(name="fix_incorrect_toc_with_vlm")
@@ -105,7 +101,7 @@ async def fix_incorrect_toc_with_vlm(
         list_index = incorrect_item["list_index"]
         page_indices = ranges.get(list_index, [])
 
-        physical_index = await _vlm_locate_title(
+        physical_index, confidence = await _vlm_locate_title(
             incorrect_item["title"],
             page_indices,
             rendered,
@@ -113,6 +109,14 @@ async def fix_incorrect_toc_with_vlm(
             max_images_per_call=max_images_per_call,
         )
 
+        in_range = physical_index is not None and start_index <= physical_index <= end_index
+        if confidence == "high" and in_range:
+            return {
+                "list_index": list_index,
+                "title": incorrect_item["title"],
+                "physical_index": physical_index,
+                "is_valid": True,
+            }
         check_item = incorrect_item.copy()
         check_item["physical_index"] = physical_index
         check_result = await check_title_appearance(check_item, pages, start_index=start_index, llm=llm)
