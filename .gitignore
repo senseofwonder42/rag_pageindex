@@ -211,3 +211,6 @@ __marimo__/
 
 # Catboost
 catboost_info/
+
+# Data
+data/*

@@ -7,12 +7,12 @@ log_level: INFO
 # LLM backend (OpenAI-compatible: OpenRouter, vLLM, etc.)
 llm_model: RedHatAI/gemma-4-26B-A4B-it-NVFP4
 llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
-# llm_model: nvidia/nemotron-nano-12b-v2-vl:free
-# llm_base_url: https://openrouter.ai/api/v1
+# llm_model: gemma-4-E4B-it-MLX-4bit
+# llm_base_url: http://127.0.0.1:8000/v1
 llm_max_retries: 0
 llm_retry_delay_s: 1.0
 llm_temperature: 0.0
-llm_max_output_tokens: 4096
+llm_max_output_tokens: 2048
 llm_timeout: 120.0
 
 # PageIndex pipeline tuning
@@ -20,7 +20,7 @@ llm_timeout: 120.0
 # How many pages from the start to scan when looking for a Table of Contents.
 # Scanning stops once this page count is reached with no TOC found. Increase
 # for documents where the TOC appears after the first few pages.
-pageindex_toc_check_page_num: 2
+pageindex_toc_check_page_num: 4
 
 # Post-tree node splitting: a node spanning more than this many pages AND
 # exceeding pageindex_max_tokens_per_node tokens is recursively re-processed

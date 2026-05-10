@@ -251,6 +251,8 @@ async def meta_processor(
                 start_index=start_index,
                 toc_max_output_tokens=settings.pageindex_toc_max_output_tokens,
                 toc_transformed=toc_transformed,
+                toc_index_max_tokens=settings.pageindex_toc_index_max_tokens,
+                toc_resolve_max_tokens=settings.pageindex_toc_resolve_max_tokens,
             )
         elif mode == "process_toc_no_page_numbers":
             toc = process_toc_no_page_numbers(

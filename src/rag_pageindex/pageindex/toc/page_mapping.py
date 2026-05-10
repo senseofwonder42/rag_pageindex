@@ -194,12 +194,62 @@ def _add_page_offset_to_toc_json(data: list[dict[str, Any]], offset: int) -> lis
     return data
 
 
+def _select_resolve_window(
+    pages: list[Page],
+    *,
+    prev_idx: int,
+    next_idx: int,
+    start_index: int,
+    max_tokens: int | None,
+) -> list[int]:
+    """Pick page indices in [prev_idx, next_idx] within token budget, centered.
+
+    Without budget, returns every valid page in range. With budget, keeps the
+    midpoint page and expands alternately outward until either side overflows.
+    """
+    candidates = [
+        page_idx
+        for page_idx in range(prev_idx, next_idx + 1)
+        if 0 <= page_idx - start_index < len(pages)
+    ]
+    if max_tokens is None or not candidates:
+        return candidates
+
+    center = len(candidates) // 2
+    selected = [candidates[center]]
+    total = pages[candidates[center] - start_index].token_length
+
+    left, right = center - 1, center + 1
+    left_open, right_open = left >= 0, right < len(candidates)
+    while left_open or right_open:
+        if right_open:
+            tok = pages[candidates[right] - start_index].token_length
+            if total + tok <= max_tokens:
+                selected.append(candidates[right])
+                total += tok
+                right += 1
+                right_open = right < len(candidates)
+            else:
+                right_open = False
+        if left_open:
+            tok = pages[candidates[left] - start_index].token_length
+            if total + tok <= max_tokens:
+                selected.insert(0, candidates[left])
+                total += tok
+                left -= 1
+                left_open = left >= 0
+            else:
+                left_open = False
+    return selected
+
+
 async def process_none_page_numbers(
     toc_items: list[dict[str, Any]],
     pages: list[Page],
     *,
     start_index: int = 1,
     llm: LLMClient,
+    resolve_max_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """For TOC items missing a physical_index, ask the LLM to find each in parallel.
 
@@ -225,13 +275,19 @@ async def process_none_page_numbers(
                 next_idx = toc_items[j]["physical_index"]
                 break
 
+        window = _select_resolve_window(
+            pages,
+            prev_idx=prev_idx,
+            next_idx=next_idx,
+            start_index=start_index,
+            max_tokens=resolve_max_tokens,
+        )
         page_contents = []
-        for page_idx in range(prev_idx, next_idx + 1):
-            list_i = page_idx - start_index
-            if 0 <= list_i < len(pages):
-                page_contents.append(
-                    f"<physical_index_{page_idx}>\n{pages[list_i].text}\n<physical_index_{page_idx}>\n\n"
-                )
+        for page_idx in window:
+            text = pages[page_idx - start_index].text
+            page_contents.append(
+                f"<physical_index_{page_idx}>\n{text}\n<physical_index_{page_idx}>\n\n"
+            )
 
         item_copy = copy.deepcopy(toc_items[i])
         item_copy.pop("page", None)
@@ -267,6 +323,8 @@ async def process_toc_with_page_numbers(
     start_index: int = 1,
     toc_max_output_tokens: int | None = None,
     toc_transformed: list[dict[str, Any]] | None = None,
+    toc_index_max_tokens: int | None = None,
+    toc_resolve_max_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build TOC with physical indices when the TOC already has page numbers."""
     if toc_transformed is None:
@@ -279,13 +337,20 @@ async def process_toc_with_page_numbers(
 
     start_page_index = toc_page_list[-1] + 1
     main_content_parts = []
+    accumulated_tokens = 0
     for pi in range(
         start_page_index,
         min(start_page_index + toc_check_page_num, len(pages)),
     ):
+        page = pages[pi]
+        if toc_index_max_tokens is not None and (
+            accumulated_tokens + page.token_length > toc_index_max_tokens
+        ):
+            break
         main_content_parts.append(
-            f"<physical_index_{pi + 1}>\n{pages[pi].text}\n<physical_index_{pi + 1}>\n\n"
+            f"<physical_index_{pi + 1}>\n{page.text}\n<physical_index_{pi + 1}>\n\n"
         )
+        accumulated_tokens += page.token_length
     main_content = "".join(main_content_parts)
 
     toc_no_page_number_list: list[dict[str, Any]] = toc_no_page_number  # type: ignore[assignment]
@@ -307,7 +372,11 @@ async def process_toc_with_page_numbers(
         toc_with_page_number = _add_page_offset_to_toc_json(toc_with_page_number, offset)
 
     toc_with_page_number = await process_none_page_numbers(
-        toc_with_page_number, pages, start_index=start_index, llm=llm
+        toc_with_page_number,
+        pages,
+        start_index=start_index,
+        llm=llm,
+        resolve_max_tokens=toc_resolve_max_tokens,
     )
     logger.info("process_none_page_numbers done")
 

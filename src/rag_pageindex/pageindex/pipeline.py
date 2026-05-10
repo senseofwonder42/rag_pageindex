@@ -60,11 +60,11 @@ def _format_structure(structure: _Tree, *, order: list[str]) -> _Tree:
 
 
 @observe(name="page_index_builder")
-async def _build(
+async def apage_index(
     source: PdfSource,
     *,
     llm: LLMClient,
-    settings: Settings,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     """Build the hierarchical page index tree for a PDF document.
 
@@ -80,6 +80,11 @@ async def _build(
         Dict with 'doc_name', 'structure', and optionally 'doc_description'.
     """
     from rag_pageindex.pageindex.pdf.reader import read_pages
+
+    if settings is None:
+        from rag_pageindex.core.config import settings as _default_settings
+
+        settings = _default_settings
 
     pages = read_pages(source, llm=llm, parser="PyPDF2")
     logger.info(
@@ -132,9 +137,4 @@ def page_index(
     Returns:
         Dict with 'doc_name', 'structure', and optionally 'doc_description'.
     """
-    if settings is None:
-        from rag_pageindex.core.config import settings as _default_settings
-
-        settings = _default_settings
-
-    return asyncio.run(_build(source, llm=llm, settings=settings))
+    return asyncio.run(apage_index(source, llm=llm, settings=settings))

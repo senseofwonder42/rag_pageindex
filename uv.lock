@@ -1739,6 +1739,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "pypdf2" },
     { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -1762,6 +1763,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.26.0" },
     { name = "pypdf2", specifier = ">=3.0.1" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=14.3.4" },
 ]
 
 [package.metadata.requires-dev]

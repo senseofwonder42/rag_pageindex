@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     # PageIndex pipeline tuning
     pageindex_toc_check_page_num: int = 20
+    pageindex_toc_index_max_tokens: int = 6000
+    pageindex_toc_resolve_max_tokens: int = 6000
     pageindex_max_pages_per_node: int = 10
     pageindex_max_tokens_per_node: int = 20_000
     pageindex_token_ceiling: int = 110_000
