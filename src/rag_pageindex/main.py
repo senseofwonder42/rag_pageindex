@@ -58,12 +58,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Index PDF(s) with PageIndex and save the tree as JSON."
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--pdf-path", type=Path, help="Path to a single PDF file"
-    )
-    group.add_argument(
-        "--input-dir", type=Path, help="Directory of PDF files to index"
-    )
+    group.add_argument("--pdf-path", type=Path, help="Path to a single PDF file")
+    group.add_argument("--input-dir", type=Path, help="Directory of PDF files to index")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -254,16 +250,12 @@ def main(argv: list[str] | None = None) -> None:
     llm = get_default_client(settings)
 
     with _tracing(settings):
-        results = asyncio.run(
-            _run_batch(pdfs, llm=llm, output_dir=args.output_dir)
-        )
+        results = asyncio.run(_run_batch(pdfs, llm=llm, output_dir=args.output_dir))
 
     if n > 1:
         _print_summary(results)
     elif results[0].ok and results[0].out is not None:
-        _console.print(
-            f"[green]✓[/green] Saved to [bold]{results[0].out}[/bold]"
-        )
+        _console.print(f"[green]✓[/green] Saved to [bold]{results[0].out}[/bold]")
 
     if any(not r.ok for r in results):
         sys.exit(1)

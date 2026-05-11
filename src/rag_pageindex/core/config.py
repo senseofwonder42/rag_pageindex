@@ -10,6 +10,8 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
+from rag_pageindex.core.constants import PROJECT_ROOT
+
 _CONFIG_YAML = Path(__file__).parent.parent.parent.parent / "config.yaml"
 
 
@@ -45,6 +47,9 @@ class Settings(BaseSettings):
     pageindex_add_node_summary: bool = False
     pageindex_add_node_text: bool = False
     pageindex_add_doc_description: bool = False
+
+    # Where indexed structure JSONs live, with their source PDFs alongside.
+    pageindex_results_dir: Path = PROJECT_ROOT / "examples" / "results"
 
     # VLM fallback: render page images when text verification fails
     pageindex_vision_mode: Literal["off", "fallback"] = "off"

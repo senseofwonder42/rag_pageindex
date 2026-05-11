@@ -212,5 +212,8 @@ __marimo__/
 # Catboost
 catboost_info/
 
+# LangGraph dev server runtime state
+.langgraph_api/
+
 # Data
 data/*

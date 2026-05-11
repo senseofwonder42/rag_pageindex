@@ -5,10 +5,10 @@
 log_level: INFO
 
 # LLM backend (OpenAI-compatible: OpenRouter, vLLM, etc.)
-llm_model: RedHatAI/gemma-4-26B-A4B-it-NVFP4
-llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
-# llm_model: gemma-4-E4B-it-MLX-4bit
-# llm_base_url: http://127.0.0.1:8000/v1
+# llm_model: RedHatAI/gemma-4-26B-A4B-it-NVFP4
+# llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
+llm_model: google/gemma-4-26b-a4b-it
+llm_base_url: https://openrouter.ai/api/v1
 llm_max_retries: 0
 llm_retry_delay_s: 1.0
 llm_temperature: 0.0

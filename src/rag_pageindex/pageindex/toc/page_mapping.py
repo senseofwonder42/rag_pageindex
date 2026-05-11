@@ -285,9 +285,7 @@ async def process_none_page_numbers(
         page_contents = []
         for page_idx in window:
             text = pages[page_idx - start_index].text
-            page_contents.append(
-                f"<physical_index_{page_idx}>\n{text}\n<physical_index_{page_idx}>\n\n"
-            )
+            page_contents.append(f"<physical_index_{page_idx}>\n{text}\n<physical_index_{page_idx}>\n\n")
 
         item_copy = copy.deepcopy(toc_items[i])
         item_copy.pop("page", None)
