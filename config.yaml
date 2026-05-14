@@ -9,10 +9,10 @@ log_level: INFO
 # llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
 llm_model: google/gemma-4-26b-a4b-it
 llm_base_url: https://openrouter.ai/api/v1
-llm_max_retries: 0
+llm_max_retries: 1
 llm_retry_delay_s: 1.0
 llm_temperature: 0.0
-llm_max_output_tokens: 2048
+llm_max_output_tokens: 4096
 llm_timeout: 120.0
 
 # PageIndex pipeline tuning
@@ -31,7 +31,7 @@ pageindex_max_pages_per_node: 10
 # within this limit are sent in one shot; larger documents are split into
 # multiple overlapping groups. Primary lever for context-window compatibility:
 # set below (model_context_window - prompt_overhead - max_output_tokens).
-pageindex_max_tokens_per_node: 2000
+pageindex_max_tokens_per_node: 4096
 
 # Reserved for a future hard cap on total document size before processing.
 # Not enforced anywhere in the current pipeline — has no effect.
@@ -50,7 +50,7 @@ pageindex_add_node_id: true
 # Generate a text summary for every node via one LLM call per node (concurrent).
 # Most expensive optional step. Text is added temporarily then stripped unless
 # pageindex_add_node_text is also true.
-pageindex_add_node_summary: false
+pageindex_add_node_summary: true
 
 # Embed raw page text into each node's `text` field in the final output.
 # No LLM call. Makes output self-contained but increases its size significantly.
@@ -58,7 +58,7 @@ pageindex_add_node_text: false
 
 # Generate a single-sentence document description from the tree of node
 # summaries. Requires pageindex_add_node_summary: true to have run first.
-pageindex_add_doc_description: false
+pageindex_add_doc_description: true
 
 # VLM fallback: use page images to recover section headings when text
 # extraction fails verification.
