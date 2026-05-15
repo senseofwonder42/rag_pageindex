@@ -120,7 +120,7 @@ def _prepare_pages_sync(
     if not ordered:
         return pdf_path, [], {}
 
-    rendered = render_pages(pdf_path, ordered, dpi=settings.pageindex_vision_dpi)
+    rendered = render_pages(pdf_path, ordered, dpi=settings.pageindex_vlm_dpi)
     return pdf_path, ordered, rendered
 
 
@@ -168,9 +168,7 @@ async def answer_from_pages(
         A grounded answer string, or a clear error message if the source PDF
         is missing.
     """
-    pdf_path, ordered, rendered = await asyncio.to_thread(
-        _prepare_pages_sync, doc_name, page_indices
-    )
+    pdf_path, ordered, rendered = await asyncio.to_thread(_prepare_pages_sync, doc_name, page_indices)
     if not ordered:
         if pdf_path is not None and not pdf_path.exists():
             return (

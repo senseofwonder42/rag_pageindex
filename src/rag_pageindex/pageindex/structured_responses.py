@@ -4,89 +4,39 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
-class TocDetectedResponse(BaseModel):
-    toc_detected: Literal["yes", "no"]
+VisualRank = Literal["xsmall", "small", "medium", "large", "xlarge"]
 
 
-class PageIndexInTocResponse(BaseModel):
-    page_index_given_in_toc: Literal["yes", "no"]
+class PageHeading(BaseModel):
+    """A section heading that *starts* on a single page."""
 
-
-class CompletionCheckResponse(BaseModel):
-    completed: Literal["yes", "no"]
-
-
-class TitleAppearanceResponse(BaseModel):
-    answer: Literal["yes", "no"]
-    at_start: Literal["yes", "no"] = "no"
-
-
-class PhysicalIndexResponse(BaseModel):
-    physical_index: str | None = Field(
-        default=None,
-        description='Physical page index in "<physical_index_X>" format, or null',
-    )
-    confidence: Literal["high", "low"] = Field(
-        default="low",
-        description='"high" only if the section heading appears verbatim or '
-        'nearly verbatim at the top of exactly one page; otherwise "low".',
+    text: str = Field(description="The heading text exactly as it appears on the page.")
+    visual_rank: VisualRank = Field(
+        description=(
+            "Relative visual size of the heading on the page. Use 'xlarge' for the "
+            "largest titles in the document, scaling down to 'xsmall' for the "
+            "smallest subsection headings."
+        ),
     )
 
 
-class TocEntry(BaseModel):
-    structure: str | None = Field(
-        default=None,
-        description='Hierarchy index in "x.x.x" format, or null',
+class PageInfo(BaseModel):
+    """Per-page record returned by the VLM batch call."""
+
+    page_index: int = Field(description="1-based page index for this image.")
+    headings: list[PageHeading] = Field(
+        default_factory=list,
+        description=(
+            "Section headings that visually start on this page. Empty list when "
+            "the page contains only body content, figures, or page numbers."
+        ),
     )
-    title: str
-    page: int | None = None
-
-
-class TocTransformResponse(BaseModel):
-    table_of_contents: list[TocEntry]
-
-
-class TocEntryWithPhysicalIndex(BaseModel):
-    structure: str | None = None
-    title: str
-    physical_index: str | None = Field(
-        default=None,
-        description='Physical page index in "<physical_index_X>" format, or null',
+    description: str = Field(
+        description="One or two sentences summarising the page's content.",
     )
 
 
-class TocIndexResponse(BaseModel):
-    """Wrapper for toc_index_extractor results."""
+class PageBatchResponse(BaseModel):
+    """Wrapper returned for a batch of N rendered pages."""
 
-    items: list[TocEntryWithPhysicalIndex] = Field(default_factory=list)
-
-
-class TocEntryWithPageNumber(BaseModel):
-    structure: str | None = None
-    title: str
-    start: Literal["yes", "no"] = "no"
-    physical_index: str | None = Field(
-        default=None,
-        description='Physical page index in "<physical_index_X>" format, or null',
-    )
-
-
-class TocPageNumberResponse(BaseModel):
-    """Wrapper for add_page_number_to_toc results."""
-
-    items: list[TocEntryWithPageNumber] = Field(default_factory=list)
-
-
-class TocGeneratedEntry(BaseModel):
-    structure: str = Field(description='Hierarchy index in "x.x.x" format')
-    title: str = Field(description="Original title extracted from text")
-    physical_index: str = Field(
-        description='Physical page index in "<physical_index_X>" format',
-    )
-
-
-class TocGeneratedResponse(BaseModel):
-    """Wrapper for generate_toc_init / generate_toc_continue results."""
-
-    items: list[TocGeneratedEntry] = Field(default_factory=list)
+    pages: list[PageInfo] = Field(default_factory=list)

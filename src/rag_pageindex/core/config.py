@@ -36,13 +36,6 @@ class Settings(BaseSettings):
     llm_timeout: float = 120.0
 
     # PageIndex pipeline tuning
-    pageindex_toc_check_page_num: int = 20
-    pageindex_toc_index_max_tokens: int = 6000
-    pageindex_toc_resolve_max_tokens: int = 6000
-    pageindex_max_pages_per_node: int = 10
-    pageindex_max_tokens_per_node: int = 20_000
-    pageindex_token_ceiling: int = 110_000
-    pageindex_toc_max_output_tokens: int = 16_000
     pageindex_add_node_id: bool = True
     pageindex_add_node_summary: bool = False
     pageindex_add_node_text: bool = False
@@ -51,12 +44,13 @@ class Settings(BaseSettings):
     # Where indexed structure JSONs live, with their source PDFs alongside.
     pageindex_results_dir: Path = PROJECT_ROOT / "examples" / "results"
 
-    # VLM fallback: render page images when text verification fails
-    pageindex_vision_mode: Literal["off", "fallback"] = "off"
-    pageindex_vision_dpi: int = 144
-    pageindex_vision_fallback_threshold: float = 0.6
-    # Some providers cap images-per-prompt (e.g. OpenRouter→Nvidia: 10).
-    pageindex_vision_max_images_per_call: int = 1
+    # VLM batch indexing: render every page and send batches of images to a
+    # vision model that returns (headings, description) per page.
+    pageindex_vlm_dpi: int = 144
+    pageindex_vlm_pages_per_batch: int = 8
+    # Provider cap on images per prompt (OpenRouter→Nvidia: 10). The actual
+    # batch size used is min(pages_per_batch, max_images_per_call).
+    pageindex_vlm_max_images_per_call: int = 8
 
     # Langfuse tracing (off by default)
     tracing_enabled: bool = False

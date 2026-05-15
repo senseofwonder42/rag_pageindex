@@ -1,0 +1,23 @@
+You are writing a 2-3 sentence summary for a single leaf section in a
+hierarchical document index. This summary will be read by a downstream agent
+to decide whether to route a query to this section, so it must concretely
+describe what the section *covers* — not generic boilerplate.
+
+Section title: {{ node_title }}
+{% if path_titles %}Ancestor path (root → parent): {{ path_titles | join(" / ") }}{% endif %}
+
+The section spans these pages, with a per-page description for each:
+{% for d in page_descriptions %}
+- Page {{ d.page }}: {{ d.description }}
+{% endfor %}
+
+Write the summary now. Requirements:
+- 2-3 complete sentences.
+- Mention concrete topics, entities, or claims actually present in the page
+  descriptions above. No filler like "this section discusses".
+- Disambiguate this section from likely siblings (e.g. mention what makes it
+  distinct from neighbouring sections at the same level, where the page
+  descriptions make that visible).
+- Do not restate the title verbatim and do not include the page numbers.
+
+Return the summary text only, with no leading label.

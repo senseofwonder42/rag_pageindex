@@ -1,0 +1,32 @@
+You are reading a contiguous batch of {{ num_pages }} pages from a PDF document.
+
+The pages are provided as images in the same order as their page indices below.
+Page indices (1-based, matching the source PDF): {{ page_indices }}
+
+For each page image, return exactly one record with these fields:
+
+1. `page_index` — echo the page index for that image from the list above.
+2. `headings` — every section/sub-section/sub-sub-section heading that *starts*
+   on this page. For each heading return:
+     - `text`: the heading exactly as it appears (preserve numbering like "2.3" if printed).
+     - `visual_rank`: the relative visual size of this heading on the page, one of
+       `xsmall`, `small`, `medium`, `large`, `xlarge`. Use `xlarge` for the very
+       biggest titles you see anywhere in this batch, scaling down to `xsmall`
+       for the smallest. Be consistent across pages — the same visual size class
+       must map to the same rank.
+   If the page contains no heading, return an empty list.
+   Do **not** return any of the following as headings — even if they look bold
+   or visually prominent:
+     - figure captions ("Figure 1: ...", "Fig. 3", "Figure 12 Performance ...")
+     - table captions ("Table 1", "Table 3: The statistics of ...")
+     - algorithm / listing / equation labels ("Algorithm 2", "Eq. 4")
+     - page numbers, running headers, running footers
+     - author names, affiliations, keywords lists, abstract labels
+     - bold inline emphasis inside body paragraphs
+   Only return text that is the *start of a new section* in the document's
+   hierarchy. When in doubt, omit.
+3. `description` — a one or two sentence summary of the actual content on this
+   page (what topic it covers, what the reader will find). Be concrete; do not
+   write "this page contains text".
+
+Return one record per image, in the same order as the images.

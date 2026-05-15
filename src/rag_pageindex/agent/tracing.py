@@ -24,8 +24,7 @@ def _ensure_langfuse_client() -> None:
 
     if settings.langfuse_public_key is None or settings.langfuse_secret_key is None:
         raise RuntimeError(
-            "tracing_enabled=True but LANGFUSE_PUBLIC_KEY / "
-            "LANGFUSE_SECRET_KEY are not set."
+            "tracing_enabled=True but LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are not set."
         )
 
     from langfuse import Langfuse

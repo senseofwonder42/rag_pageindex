@@ -5,9 +5,8 @@
 log_level: INFO
 
 # LLM backend (OpenAI-compatible: OpenRouter, vLLM, etc.)
-# llm_model: RedHatAI/gemma-4-26B-A4B-it-NVFP4
-# llm_base_url: https://8000-01k1wjgqqy4hpabpd5vamndh97.cloudspaces.litng.ai/v1
-llm_model: google/gemma-4-26b-a4b-it
+# Must be a vision-capable model for the VLM-per-page pipeline.
+llm_model: google/gemma-4-31b-it
 llm_base_url: https://openrouter.ai/api/v1
 llm_max_retries: 1
 llm_retry_delay_s: 1.0
@@ -17,65 +16,33 @@ llm_timeout: 120.0
 
 # PageIndex pipeline tuning
 
-# How many pages from the start to scan when looking for a Table of Contents.
-# Scanning stops once this page count is reached with no TOC found. Increase
-# for documents where the TOC appears after the first few pages.
-pageindex_toc_check_page_num: 4
-
-# Post-tree node splitting: a node spanning more than this many pages AND
-# exceeding pageindex_max_tokens_per_node tokens is recursively re-processed
-# to extract finer sub-structure. Both conditions must be true to trigger a split.
-pageindex_max_pages_per_node: 10
-
-# Token budget per chunk when grouping pages for LLM calls. Documents that fit
-# within this limit are sent in one shot; larger documents are split into
-# multiple overlapping groups. Primary lever for context-window compatibility:
-# set below (model_context_window - prompt_overhead - max_output_tokens).
-pageindex_max_tokens_per_node: 4096
-
-# Reserved for a future hard cap on total document size before processing.
-# Not enforced anywhere in the current pipeline — has no effect.
-pageindex_token_ceiling: 110000
-
-# max_tokens passed to the LLM during TOC extraction calls specifically
-# (toc_transformer, toc_index_extractor). Must leave room for the input
-# within the model's context window; should not exceed llm_max_output_tokens
-# for small-context models.
-pageindex_toc_max_output_tokens: 4096
-
-# Stamp a unique integer node_id on every tree node (depth-first). No LLM
-# call — pure post-processing. Useful for referencing nodes in retrieval.
+# Stamp a zero-padded node_id on every tree node (depth-first). No LLM call.
 pageindex_add_node_id: true
 
-# Generate a text summary for every node via one LLM call per node (concurrent).
-# Most expensive optional step. Text is added temporarily then stripped unless
-# pageindex_add_node_text is also true.
-pageindex_add_node_summary: true
+# Two-stage summaries: leaves are rolled up from the per-page descriptions
+# returned by the VLM batch call; internal nodes are reduced bottom-up from
+# their child summaries. Set false to skip both passes entirely.
+pageindex_add_node_summary: false
 
-# Embed raw page text into each node's `text` field in the final output.
-# No LLM call. Makes output self-contained but increases its size significantly.
+# Embed raw page text into each leaf node's `text` field in the final output.
+# No LLM call. Significantly enlarges the output JSON.
 pageindex_add_node_text: false
 
 # Generate a single-sentence document description from the tree of node
 # summaries. Requires pageindex_add_node_summary: true to have run first.
-pageindex_add_doc_description: true
+pageindex_add_doc_description: false
 
-# VLM fallback: use page images to recover section headings when text
-# extraction fails verification.
-#
-# "off"      — text-only pipeline, no image rendering (default).
-# "fallback" — text path runs first; images are rendered lazily only when
-#              a title cannot be located by the text fixer. Requires a
-#              vision-capable model (e.g. nvidia/nemotron-nano-12b-v2-vl).
-pageindex_vision_mode: fallback
+# DPI used when rendering each page to PNG before sending to the VLM.
+# 144 dpi gives ~1568px on A4 at the long edge — the Anthropic/OpenAI
+# recommended sweet spot for cost vs. legibility. Lower values save image
+# tokens; raise to 192 for dense academic papers if small headings are
+# being missed.
+pageindex_vlm_dpi: 144
 
-# DPI used when rendering page images. 144 dpi gives ~1568px on A4 at the
-# long edge — Anthropic/OpenAI recommended sweet spot for cost vs. quality.
-# Lower values reduce token cost; higher values improve legibility of
-# small text and fine diagrams.
-pageindex_vision_dpi: 144
+# Number of page images sent per VLM call. Higher batches reduce call
+# count (each batch is one LLM call) but raise per-call token cost.
+pageindex_vlm_pages_per_batch: 4
 
-# Accuracy threshold that triggers the VLM fallback. When verification
-# accuracy after the text fixer is still below this value on Path C
-# (no-TOC), the pipeline re-extracts the failing page range using images.
-pageindex_vision_fallback_threshold: 0.6
+# Hard cap on images-per-prompt enforced by some providers (OpenRouter→
+# Nvidia: 10). The effective batch is min(pages_per_batch, max_images_per_call).
+pageindex_vlm_max_images_per_call: 4

@@ -22,7 +22,7 @@
     {
       "title": "PRELIMINARIES",
       "start_index": 2,
-      "end_index": 2,
+      "end_index": 4,
       "nodes": [
         {
           "title": "Computing the EMD",
@@ -48,7 +48,7 @@
     {
       "title": "BOOSTING THE REFINEMENT PHASE",
       "start_index": 5,
-      "end_index": 5,
+      "end_index": 8,
       "nodes": [
         {
           "title": "Analysis of EMD Calculation",
@@ -86,7 +86,7 @@
     {
       "title": "EXPERIMENTAL EVALUATION",
       "start_index": 8,
-      "end_index": 9,
+      "end_index": 11,
       "nodes": [
         {
           "title": "Performance Improvement",
@@ -103,7 +103,7 @@
         {
           "title": "Parameter Tuning in DRO",
           "start_index": 11,
-          "end_index": 12,
+          "end_index": 11,
           "node_id": "0016"
         }
       ],
@@ -111,7 +111,7 @@
     },
     {
       "title": "RELATED WORK",
-      "start_index": 12,
+      "start_index": 11,
       "end_index": 12,
       "node_id": "0017"
     },
